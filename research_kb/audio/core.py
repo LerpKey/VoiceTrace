@@ -295,12 +295,12 @@ def render_markdown(
     structured_path: str = "transcription/transcript.json",
 ) -> str:
     """Render a faithful human transcript from the structured authority."""
-    lines = [f"# {document.title}", "", "## 说明", ""]
+    lines = [f"# {document.title}", "", "## Notes", ""]
     lines.extend(
         [
-            "- 本文按录音时间顺序逐句转写，保留口头语、重复和不完整句。",
-            "- 说话人标签基于匿名声纹聚类；无法可靠判断的内容使用明确标记。",
-            f"- 结构化事实、候选文本和模型溯源保存在 `{structured_path}`。",
+            "- This transcript follows recording time and keeps spoken language, repetition, and incomplete sentences.",
+            "- Speaker labels come from anonymous voice clustering; uncertain content is marked explicitly.",
+            f"- Structured facts, candidates, and model provenance are stored in `{structured_path}`.",
             "",
         ]
     )
@@ -316,9 +316,9 @@ def render_markdown(
             [
                 f"## {source.recorded_at:%Y-%m-%d}",
                 "",
-                f"录音：`{source.filename}`  ",
-                f"时间：{source.recorded_at:%H:%M:%S}–{end_at:%H:%M:%S}  ",
-                f"时长：{format_elapsed(source.duration_ms)}",
+                f"Recording: `{source.filename}`  ",
+                f"Time: {source.recorded_at:%H:%M:%S}–{end_at:%H:%M:%S}  ",
+                f"Duration: {format_elapsed(source.duration_ms)}",
                 "",
             ]
         )
@@ -327,18 +327,18 @@ def render_markdown(
             if segment.start_ms - cursor >= long_gap_ms:
                 start_clock = source.recorded_at + timedelta(milliseconds=cursor)
                 end_clock = source.recorded_at + timedelta(milliseconds=segment.start_ms)
-                lines.append(f"[{start_clock:%H:%M:%S}–{end_clock:%H:%M:%S}] [无可辨识语音]")
+                lines.append(f"[{start_clock:%H:%M:%S}–{end_clock:%H:%M:%S}] [No recognizable speech]")
                 lines.append("")
             start_clock = source.recorded_at + timedelta(milliseconds=segment.start_ms)
             end_clock = source.recorded_at + timedelta(milliseconds=segment.end_ms)
             lines.append(
-                f"[{start_clock:%H:%M:%S}–{end_clock:%H:%M:%S}] {segment.speaker}：{segment.text}"
+                f"[{start_clock:%H:%M:%S}–{end_clock:%H:%M:%S}] {segment.speaker}: {segment.text}"
             )
             lines.append("")
             cursor = max(cursor, segment.end_ms)
         if source.duration_ms - cursor >= long_gap_ms:
             start_clock = source.recorded_at + timedelta(milliseconds=cursor)
-            lines.append(f"[{start_clock:%H:%M:%S}–{end_at:%H:%M:%S}] [无可辨识语音]")
+            lines.append(f"[{start_clock:%H:%M:%S}–{end_at:%H:%M:%S}] [No recognizable speech]")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 

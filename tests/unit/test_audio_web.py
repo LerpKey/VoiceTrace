@@ -49,19 +49,19 @@ def _write_catalog(tmp_path: Path) -> tuple[Path, bytes]:
                 "recording_id": "recording_01",
                 "start_ms": 1_000,
                 "end_ms": 5_000,
-                "speaker": "说话人 A",
-                "text": "第一句。",
+                "speaker": "Speaker A",
+                "text": "First sentence.",
                 "confidence": 0.8,
                 "flags": [],
-                "candidates": [{"provider": "local", "model": "test", "text": "第一句"}],
+                "candidates": [{"provider": "local", "model": "test", "text": "First sentence"}],
             },
             {
                 "segment_id": "segment_2",
                 "recording_id": "recording_01",
                 "start_ms": 6_000,
                 "end_ms": 9_000,
-                "speaker": "说话人 B",
-                "text": "第二句。",
+                "speaker": "Speaker B",
+                "text": "Second sentence.",
                 "confidence": 0.7,
                 "flags": ["unclear"],
                 "candidates": [],
@@ -71,8 +71,8 @@ def _write_catalog(tmp_path: Path) -> tuple[Path, bytes]:
                 "recording_id": "recording_01",
                 "start_ms": 25_000,
                 "end_ms": 31_000,
-                "speaker": "说话人 B",
-                "text": "长空白后的新段落。",
+                "speaker": "Speaker B",
+                "text": "A new paragraph after a long silence.",
                 "confidence": 0.6,
                 "flags": [],
                 "candidates": [],
@@ -86,9 +86,9 @@ def _write_catalog(tmp_path: Path) -> tuple[Path, bytes]:
         "topics": [
             {
                 "topic_id": "topic_1",
-                "title": "开场",
-                "summary": "测试话题",
-                "keywords": ["测试"],
+                "title": "Opening",
+                "summary": "Test topic",
+                "keywords": ["test"],
                 "start_segment_id": "segment_1",
                 "end_segment_id": "segment_2",
                 "evidence_segment_ids": ["segment_1", "segment_2"],
@@ -132,18 +132,18 @@ def test_markdown_exports_include_summary_and_complete_dialogue(tmp_path: Path) 
 
     assert summary.status_code == 200
     assert summary.headers["content-type"].startswith("text/markdown")
-    assert "# recording.mp3\uff5c总结" in summary.text
-    assert "### 01. 开场" in summary.text
-    assert "测试话题" in summary.text
+    assert "# recording.mp3 | Summary" in summary.text
+    assert "### 01. Opening" in summary.text
+    assert "Test topic" in summary.text
     assert "attachment;" in summary.headers["content-disposition"]
     assert transcript.status_code == 200
-    assert "# recording.mp3\uff5c完整对话" in transcript.text
-    assert "### 00:00:01\u201300:00:05 · 说话人 A" in transcript.text
-    assert "第一句。" in transcript.text
-    assert "### 00:00:25\u201300:00:31 · 说话人 B" in transcript.text
+    assert "# recording.mp3 | Full transcript" in transcript.text
+    assert "### 00:00:01–00:00:05 · Speaker A" in transcript.text
+    assert "First sentence." in transcript.text
+    assert "### 00:00:25–00:00:31 · Speaker B" in transcript.text
     catalog = RecordingCatalog(data)
     empty_summary = audio_web._render_summary_export(catalog, catalog.entries()[0], [])
-    assert "没有找到符合本次整理要求的内容" in empty_summary
+    assert "No content matched this prompt" in empty_summary
 
 
 def test_catalog_recovers_original_upload_filename_from_job_metadata(tmp_path: Path) -> None:
@@ -153,7 +153,7 @@ def test_catalog_recovers_original_upload_filename_from_job_metadata(tmp_path: P
         job_dir / "job.json",
         {
             "id": "job-original-name",
-            "filename": "录音机-20260812-0846.m4a",
+            "filename": "recorder-20260812-0846.m4a",
             "sha256": "a" * 64,
             "created_at": 123.0,
             "status": "completed",
@@ -162,8 +162,8 @@ def test_catalog_recovers_original_upload_filename_from_job_metadata(tmp_path: P
 
     listing = TestClient(create_app(data)).get("/api/recordings").json()
 
-    assert listing[0]["title"] == "录音机-20260812-0846.m4a"
-    assert listing[0]["original_title"] == "录音机-20260812-0846.m4a"
+    assert listing[0]["title"] == "recorder-20260812-0846.m4a"
+    assert listing[0]["original_title"] == "recorder-20260812-0846.m4a"
     assert listing[0]["title_overridden"] is False
 
 
@@ -178,7 +178,7 @@ def test_api_lists_windows_and_streams_byte_ranges(tmp_path: Path) -> None:
     assert listing[0]["has_topics"] is True
     detail = client.get(f"/api/recordings/{recording_id}").json()
     assert len(detail["density"]) == 240
-    assert detail["topics"][0]["title"] == "开场"
+    assert detail["topics"][0]["title"] == "Opening"
     assert detail["topic_segment_count"] == 2
     assert detail["segment_count"] == 3
     window = client.get(
@@ -239,15 +239,15 @@ def test_summary_endpoint_runs_on_demand_and_persists_prompt(
                     "recording_id": "recording_01",
                     "start_ms": 1_000,
                     "end_ms": 5_000,
-                    "speaker": "说话人 A",
-                    "text": "测试文本",
+                    "speaker": "Speaker A",
+                    "text": "Test transcript",
                     "decision": "local_primary",
                     "confidence": 0.8,
                     "candidates": [
                         {
                             "provider": "local",
                             "model": "test",
-                            "text": "测试文本",
+                            "text": "Test transcript",
                             "start_ms": 1_000,
                             "end_ms": 5_000,
                         }
@@ -265,11 +265,11 @@ def test_summary_endpoint_runs_on_demand_and_persists_prompt(
         topics=(
             TranscriptTopic(
                 topic_id="topic_0001",
-                title="财经相关内容",
+                title="Finance content",
                 start_segment_id="segment_1",
                 end_segment_id="segment_1",
-                summary="保留财经观点。",
-                keywords=("财经",),
+                summary="Keep finance views.",
+                keywords=("finance",),
                 evidence_segment_ids=("segment_1",),
             ),
         ),
@@ -277,7 +277,7 @@ def test_summary_endpoint_runs_on_demand_and_persists_prompt(
         usage=(),
         estimated_cost_cny=0.01,
         cost_cap_cny=0.3,
-        user_prompt="只保留财经内容",
+        user_prompt="Keep only finance content",
     )
 
     class FakeReviewer:
@@ -320,7 +320,7 @@ def test_summary_endpoint_runs_on_demand_and_persists_prompt(
 
     response = client.post(
         f"/api/recordings/{recording_id}/summary",
-        json={"prompt": "只保留财经内容"},
+        json={"prompt": "Keep only finance content"},
     )
 
     assert response.status_code == 202
@@ -332,12 +332,12 @@ def test_summary_endpoint_runs_on_demand_and_persists_prompt(
             break
         time.sleep(0.01)
     assert detail["summary"]["status"] == "completed"  # type: ignore[index]
-    assert detail["topics"][0]["title"] == "财经相关内容"  # type: ignore[index]
-    assert captured["user_prompt"] == "只保留财经内容"
+    assert detail["topics"][0]["title"] == "Finance content"  # type: ignore[index]
+    assert captured["user_prompt"] == "Keep only finance content"
     saved = json.loads((transcription / "summary_result.json").read_text(encoding="utf-8"))
-    assert saved["prompt"] == "只保留财经内容"
-    assert saved["analysis"]["user_prompt"] == "只保留财经内容"
-    assert (transcription / "总结_话题索引.md").is_file()
+    assert saved["prompt"] == "Keep only finance content"
+    assert saved["analysis"]["user_prompt"] == "Keep only finance content"
+    assert (transcription / "topic-index.md").is_file()
     assert analysis_path.exists() is original_analysis_exists
     assert (transcription / "processing_manifest.json").read_bytes() == original_manifest
     assert (transcription / "transcript.json").read_bytes() == original_transcript
@@ -349,27 +349,27 @@ def test_summary_prompt_library_supports_create_update_and_reload(tmp_path: Path
 
     initial = client.get("/api/summary-prompts")
     assert initial.status_code == 200
-    assert {item["name"] for item in initial.json()} >= {"完整会议", "财经直播"}
+    assert {item["name"] for item in initial.json()} >= {"Complete meeting", "Finance livestream"}
 
     created = client.post(
         "/api/summary-prompts",
-        json={"name": "项目复盘", "prompt": "只保留问题、决定和负责人。"},
+        json={"name": "Project retrospective", "prompt": "Keep questions, decisions, and owners."},
     )
     assert created.status_code == 201
     prompt = created.json()
     updated = client.put(
         f"/api/summary-prompts/{prompt['id']}",
-        json={"name": "项目复盘", "prompt": "只保留问题、决定、负责人和截止时间。"},
+        json={"name": "Project retrospective", "prompt": "Keep questions, decisions, owners, and deadlines."},
     )
     assert updated.status_code == 200
-    assert updated.json()["prompt"].endswith("截止时间。")
+    assert updated.json()["prompt"].endswith("deadlines.")
 
     reloaded = TestClient(create_app(data)).get("/api/summary-prompts")
-    assert any(item["prompt"].endswith("截止时间。") for item in reloaded.json())
+    assert any(item["prompt"].endswith("deadlines.") for item in reloaded.json())
     assert (
         client.put(
             "/api/summary-prompts/prompt-does-not-exist",
-            json={"name": "不存在", "prompt": "无效"},
+            json={"name": "Missing", "prompt": "Invalid"},
         ).status_code
         == 404
     )
@@ -430,14 +430,14 @@ def test_api_applies_recording_wide_speaker_overrides_without_changing_source(
     assert speakers.status_code == 200
     assert speakers.json() == [
         {
-            "source_speaker": "说话人 A",
-            "display_name": "说话人 A",
+            "source_speaker": "Speaker A",
+            "display_name": "Speaker A",
             "segment_count": 1,
             "is_overridden": False,
         },
         {
-            "source_speaker": "说话人 B",
-            "display_name": "说话人 B",
+            "source_speaker": "Speaker B",
+            "display_name": "Speaker B",
             "segment_count": 2,
             "is_overridden": False,
         },
@@ -445,37 +445,37 @@ def test_api_applies_recording_wide_speaker_overrides_without_changing_source(
 
     updated = client.put(
         f"/api/recordings/{recording_id}/speaker-overrides",
-        json={"source_speaker": "说话人 B", "display_name": "项目负责人"},
+        json={"source_speaker": "Speaker B", "display_name": "Project owner"},
     )
     assert updated.status_code == 200
-    assert updated.json()[1]["display_name"] == "项目负责人"
+    assert updated.json()[1]["display_name"] == "Project owner"
     window = client.get(
         f"/api/recordings/{recording_id}/blocks",
         params={"start_ms": 0, "end_ms": 40_000},
     ).json()
     sentences = [sentence for block in window["blocks"] for sentence in block["sentences"]]
     assert [sentence["speaker"] for sentence in sentences] == [
-        "说话人 A",
-        "项目负责人",
-        "项目负责人",
+        "Speaker A",
+        "Project owner",
+        "Project owner",
     ]
-    assert sentences[1]["original_speaker"] == "说话人 B"
+    assert sentences[1]["original_speaker"] == "Speaker B"
     assert transcript_path.read_bytes() == original_document
 
     restarted = TestClient(create_app(data))
     persisted = restarted.get(f"/api/recordings/{recording_id}/speakers").json()
-    assert persisted[1]["display_name"] == "项目负责人"
+    assert persisted[1]["display_name"] == "Project owner"
     reset = restarted.request(
         "DELETE",
         f"/api/recordings/{recording_id}/speaker-overrides",
-        params={"source_speaker": "说话人 B"},
+        params={"source_speaker": "Speaker B"},
     )
     assert reset.status_code == 200
-    assert reset.json()[1]["display_name"] == "说话人 B"
+    assert reset.json()[1]["display_name"] == "Speaker B"
     assert (
         restarted.put(
             f"/api/recordings/{recording_id}/speaker-overrides",
-            json={"source_speaker": "不存在", "display_name": "某人"},
+            json={"source_speaker": "Missing", "display_name": "Someone"},
         ).status_code
         == 404
     )
@@ -489,7 +489,7 @@ def test_api_persists_favorites_and_keeps_append_only_activity_log(tmp_path: Pat
     created = client.put(f"/api/recordings/{recording_id}/favorites/segment_2")
     assert created.status_code == 200
     assert created.json()[0]["segment_id"] == "segment_2"
-    assert created.json()[0]["text"] == "第二句。"
+    assert created.json()[0]["text"] == "Second sentence."
     assert client.put(f"/api/recordings/{recording_id}/favorites/segment_2").status_code == 200
 
     restarted = TestClient(create_app(data))
@@ -530,8 +530,8 @@ def test_api_aggregates_favorites_and_persists_editable_notes(tmp_path: Path) ->
             "segment_id": "segment_2",
             "start_ms": 6_000,
             "end_ms": 9_000,
-            "speaker": "说话人 B",
-            "text": "第二句。",
+            "speaker": "Speaker B",
+            "text": "Second sentence.",
             "created_at": aggregated.json()[0]["created_at"],
             "note": "",
             "note_updated_at": None,
@@ -540,16 +540,16 @@ def test_api_aggregates_favorites_and_persists_editable_notes(tmp_path: Path) ->
 
     updated = client.put(
         f"/api/recordings/{recording_id}/favorites/segment_2/note",
-        json={"note": "需要跟进这个问题并补充完整背景。"},
+        json={"note": "Follow up on this issue and add the missing context."},
     )
     assert updated.status_code == 200
-    assert updated.json()["note"] == "需要跟进这个问题并补充完整背景。"
+    assert updated.json()["note"] == "Follow up on this issue and add the missing context."
     assert updated.json()["note_updated_at"]
     assert transcript_path.read_bytes() == original_document
 
     restarted = TestClient(create_app(data))
     persisted = restarted.get("/api/favorites").json()[0]
-    assert persisted["note"] == "需要跟进这个问题并补充完整背景。"
+    assert persisted["note"] == "Follow up on this issue and add the missing context."
     assert persisted["recording_title"] == "recording.mp3"
 
     cleared = restarted.put(
@@ -566,14 +566,14 @@ def test_api_aggregates_favorites_and_persists_editable_notes(tmp_path: Path) ->
     assert (
         restarted.put(
             f"/api/recordings/{recording_id}/favorites/missing-segment/note",
-            json={"note": "不存在"},
+            json={"note": "Missing"},
         ).status_code
         == 404
     )
     assert (
         restarted.put(
             f"/api/recordings/{recording_id}/favorites/segment_2/note",
-            json={"note": "太" * 2_001},
+            json={"note": "x" * 2_001},
         ).status_code
         == 422
     )
@@ -590,22 +590,22 @@ def test_api_renames_searches_hides_and_restores_recordings_non_destructively(
 
     renamed = client.put(
         f"/api/recordings/{recording_id}/title",
-        json={"title": "八月五日会议录音"},
+        json={"title": "August 5 meeting recording"},
     )
     assert renamed.status_code == 200
-    assert renamed.json()["title"] == "八月五日会议录音"
+    assert renamed.json()["title"] == "August 5 meeting recording"
     assert renamed.json()["original_title"] == "recording.mp3"
     assert renamed.json()["title_overridden"] is True
     assert transcript_path.read_bytes() == original_document
-    assert client.get("/api/recordings", params={"q": "会议"}).json()[0]["id"] == recording_id
-    assert client.get("/api/recordings", params={"q": "不存在"}).json() == []
+    assert client.get("/api/recordings", params={"q": "meeting"}).json()[0]["id"] == recording_id
+    assert client.get("/api/recordings", params={"q": "missing"}).json() == []
 
     removed = client.delete(f"/api/recordings/{recording_id}")
     assert removed.status_code == 200
     assert removed.json()["hidden"] is True
     assert client.get("/api/recordings").json() == []
     hidden = client.get("/api/recordings", params={"include_hidden": "true"}).json()
-    assert hidden[0]["title"] == "八月五日会议录音"
+    assert hidden[0]["title"] == "August 5 meeting recording"
     assert hidden[0]["hidden"] is True
     assert transcript_path.read_bytes() == original_document
 
@@ -665,7 +665,7 @@ def test_window_validation_and_upload_job(tmp_path: Path, monkeypatch: pytest.Mo
     job = uploaded.json()
     assert job["status"] == "queued"
     assert job["progress_percent"] == 0
-    assert job["stage"] == "等待开始"
+    assert job["stage"] == "Waiting to start"
     assert client.get(f"/api/jobs/{job['id']}").json()["sha256"]
     assert client.get("/api/jobs").json()[0]["id"] == job["id"]
     assert client.get("/api/jobs/../bad").status_code == 404
@@ -911,7 +911,7 @@ def test_running_job_can_request_cancellation(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["cancel_requested"] is True
-    assert response.json()["stage"] == "正在取消"
+    assert response.json()["stage"] == "Cancelling"
     assert process.terminated is True
     stored = audio_web._read_json(job_path)
     assert stored["cancel_requested_at"] > 0
@@ -930,7 +930,7 @@ def test_queued_job_is_cancelled_without_waiting_for_running_job(tmp_path: Path)
 
     assert response.status_code == 200
     assert response.json()["status"] == "cancelled"
-    assert response.json()["stage"] == "已取消"
+    assert response.json()["stage"] == "Cancelled"
 
 
 def test_failed_deepseek_job_offers_zero_cost_finalize_decision(tmp_path: Path) -> None:
@@ -998,7 +998,7 @@ def test_completed_deepseek_fallback_offers_text_only_repair(tmp_path: Path) -> 
             ],
             "cloud_billed_seconds": 100,
             "text_review_cost_cny": 0.08,
-            "errors": ["文本整理已回退: DeepSeek returned invalid window JSON"],
+            "errors": ["Text review fallback: DeepSeek returned invalid window JSON"],
         },
     )
 
@@ -1006,12 +1006,12 @@ def test_completed_deepseek_fallback_offers_text_only_repair(tmp_path: Path) -> 
 
     decision = job["recovery_decision"]
     assert decision["strategy"] == "retry_text_review_only"
-    assert decision["continue_label"] == "仅修复文本整理"
+    assert decision["continue_label"] == "Repair text review"
     assert decision["additional_external_cost_cny"] == pytest.approx(0.22)
-    assert "不会重新上传音频或产生 ASR 费用" in decision["impact"]
+    assert "Audio will not be uploaded again and no ASR cost will be added" in decision["impact"]
     assert job["core_transcript_ready"] is True
     assert job["text_review_status"] == "fallback"
-    assert job["stage"] == "转写可用 · 文本整理待处理"
+    assert job["stage"] == "Transcript ready · text review pending"
     assert "deepseek_text" not in job["completed_steps"]
 
 
@@ -1043,21 +1043,21 @@ def test_completed_partial_text_review_offers_bounded_text_only_choice(
                 "deepseek_text",
                 "render",
             ],
-            "errors": ["文本整理已完成: 2 个窗口因费用上限保留原始识别"],
+            "errors": ["Text review complete: 2 windows kept the original recognition because of the cost cap"],
         },
     )
 
     job = TestClient(create_app(data)).get("/api/jobs/job-partial-review").json()
 
-    assert job["warning"].startswith("文本整理已完成")
+    assert job["warning"].startswith("Text review complete")
     decision = job["recovery_decision"]
     assert decision["strategy"] == "extend_text_review_budget"
-    assert decision["continue_label"] == "追加预算完成剩余窗口"
+    assert decision["continue_label"] == "Add budget and finish remaining windows"
     assert decision["additional_external_cost_cny"] <= 3
-    assert "不会重新上传音频或产生 ASR 费用" in decision["impact"]
+    assert "Audio will not be uploaded again and no ASR cost will be added" in decision["impact"]
     assert job["core_transcript_ready"] is True
     assert job["text_review_status"] == "partial"
-    assert job["stage"] == "转写可用 · 文本整理部分完成"
+    assert job["stage"] == "Transcript ready · text review partially complete"
     assert "deepseek_text" not in job["completed_steps"]
     repair_started: list[Path] = []
     transcription_started: list[object] = []
@@ -1104,7 +1104,7 @@ def test_completed_fallback_continue_starts_only_text_review_repair(
         work_dir / "processing_manifest.json",
         {
             "completed_steps": ["preprocess", "cloud", "local", "speakers", "render"],
-            "errors": ["文本整理已回退: DeepSeek returned invalid window JSON"],
+            "errors": ["Text review fallback: DeepSeek returned invalid window JSON"],
         },
     )
     repair_started: list[Path] = []
@@ -1123,7 +1123,7 @@ def test_completed_fallback_continue_starts_only_text_review_repair(
     response = TestClient(create_app(data)).post("/api/jobs/job-completed-review/continue")
 
     assert response.status_code == 202
-    assert response.json()["stage"] == "等待修复文本整理"
+    assert response.json()["stage"] == "Waiting for text review repair"
     stored = audio_web._read_json(job_path)
     assert stored["operation"] == "text_review_repair"
     assert repair_started == [job_path]
@@ -1159,8 +1159,8 @@ def test_text_review_repair_writes_only_derived_text_artifacts(
                     "recording_id": "recording_01",
                     "start_ms": 0,
                     "end_ms": 1_000,
-                    "speaker": "说话人 A",
-                    "text": "测试文本",
+                    "speaker": "Speaker A",
+                    "text": "Test transcript",
                     "decision": "local_primary",
                     "confidence": 0.9,
                 }
@@ -1174,7 +1174,7 @@ def test_text_review_repair_writes_only_derived_text_artifacts(
         {
             "completed_steps": ["preprocess", "cloud", "local", "speakers", "render"],
             "cloud_billed_seconds": 100,
-            "errors": ["文本整理已回退: invalid window JSON"],
+            "errors": ["Text review fallback: invalid window JSON"],
         },
     )
     job_path = job_dir / "job.json"
@@ -1216,8 +1216,8 @@ def test_text_review_repair_writes_only_derived_text_artifacts(
     assert manifest["errors"] == []
     assert manifest["text_review_model"] == "deepseek-test"
     assert (work_dir / "text_analysis.json").is_file()
-    assert (job_dir / "transcription" / "转文字文档.md").is_file()
-    assert (job_dir / "transcription" / "转文字文档_话题索引.md").is_file()
+    assert (job_dir / "transcription" / "transcript.md").is_file()
+    assert (job_dir / "transcription" / "topic-index.md").is_file()
 
 
 def test_text_review_repair_failure_keeps_completed_transcript(
@@ -1494,7 +1494,7 @@ def test_job_progress_merges_manifest_tokens_and_costs(tmp_path: Path) -> None:
 
     assert [job["id"] for job in jobs] == ["job-2", "job-1"]
     current = jobs[0]
-    assert current["stage"] == "整理说话人"
+    assert current["stage"] == "Organizing speakers"
     assert current["progress_percent"] == 50
     assert current["completed_steps"] == ["preprocess", "cloud", "local"]
     assert current["cloud_billed_seconds"] == 600
@@ -1563,7 +1563,7 @@ def test_job_progress_reads_live_token_cache_before_manifest_finishes(tmp_path: 
 
     job = audio_web._public_job(job_path)
 
-    assert job["stage"] == "预处理与降噪"
+    assert job["stage"] == "Preprocessing and denoising"
     assert job["progress_percent"] == 5
     assert job["text_review_input_tokens"] == 3_000
     assert job["text_review_output_tokens"] == 500
@@ -1895,10 +1895,10 @@ def test_public_job_exposes_retry_and_restart_recovery_stage(tmp_path: Path) -> 
             "max_attempts": 3,
         },
     )
-    assert audio_web._public_job(job_path)["stage"] == "自动断点重试 2/3"
+    assert audio_web._public_job(job_path)["stage"] == "Automatic checkpoint retry 2/3"
 
     audio_web._write_job(job_path, {"status": "queued", "recovery_count": 1})
-    assert audio_web._public_job(job_path)["stage"] == "等待断点恢复"
+    assert audio_web._public_job(job_path)["stage"] == "Waiting to resume from checkpoint"
 
 
 def test_heavy_transcription_jobs_are_serialized(
@@ -2034,16 +2034,16 @@ def test_catalog_prefers_non_destructive_reading_view(tmp_path: Path) -> None:
     transcription = data / "sample" / "transcription"
     original = json.loads((transcription / "transcript.json").read_text(encoding="utf-8"))
     reading = json.loads(json.dumps(original))
-    reading["segments"][0]["text"] = "整理后的显示文本。"
+    reading["segments"][0]["text"] = "Edited display text."
     (transcription / "reading_view.json").write_text(
         json.dumps(reading, ensure_ascii=False), encoding="utf-8"
     )
 
     catalog = RecordingCatalog(data)
-    assert catalog.segments(catalog.entries()[0])[0]["text"] == "整理后的显示文本。"
+    assert catalog.segments(catalog.entries()[0])[0]["text"] == "Edited display text."
     assert (
         json.loads((transcription / "transcript.json").read_text(encoding="utf-8"))["segments"][0][
             "text"
         ]
-        == "第一句。"
+        == "First sentence."
     )

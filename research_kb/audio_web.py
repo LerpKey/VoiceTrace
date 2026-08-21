@@ -50,14 +50,14 @@ ASR_PRICE_PER_SECOND_CNY = PRICE_PER_SECOND_CNY
 MAX_JOB_ATTEMPTS = 3
 MAX_SUMMARY_ATTEMPTS = 3
 SUMMARY_RESULT_FILENAME = "summary_result.json"
-SUMMARY_MARKDOWN_FILENAME = "总结_话题索引.md"
+SUMMARY_MARKDOWN_FILENAME = "topic-index.md"
 JOB_STEP_LABELS = {
-    "preprocess": "预处理与降噪",
-    "cloud": "云端语音识别",
-    "local": "本地语音识别",
-    "speakers": "整理说话人",
-    "deepseek_text": "DeepSeek 文本整理",
-    "render": "生成转写结果",
+    "preprocess": "Preprocessing and denoising",
+    "cloud": "Cloud speech recognition",
+    "local": "Local speech recognition",
+    "speakers": "Organizing speakers",
+    "deepseek_text": "DeepSeek text review",
+    "render": "Rendering transcript",
 }
 _JOB_STATE_LOCK = threading.RLock()
 _TRANSCRIPTION_RUN_LOCK = threading.Lock()
@@ -141,19 +141,19 @@ def _render_transcript_export(catalog: RecordingCatalog, entry: RecordingEntry) 
         key=lambda item: (int(item.get("start_ms", 0)), int(item.get("end_ms", 0))),
     )
     lines = [
-        f"# {_markdown_text(catalog.effective_title(entry), '未命名录音')}｜完整对话",
+        f"# {_markdown_text(catalog.effective_title(entry), 'Untitled recording')} | Full transcript",
         "",
-        f"> 录音日期：{_markdown_text(entry.recorded_at, '未记录')}",
-        f"> 总时长：{_elapsed_clock(entry.duration_ms)}",
-        f"> 语音条数：{len(segments)}",
+        f"> Recording date: {_markdown_text(entry.recorded_at, 'Not recorded')}",
+        f"> Duration: {_elapsed_clock(entry.duration_ms)}",
+        f"> Speech segments: {len(segments)}",
         "",
-        "## 对话正文",
+        "## Full transcript",
         "",
     ]
     for segment in segments:
         start_ms = int(segment.get("start_ms", 0))
         end_ms = int(segment.get("end_ms", start_ms))
-        speaker = _markdown_text(segment.get("speaker"), "说话人（未确认）")
+        speaker = _markdown_text(segment.get("speaker"), "Speaker (unconfirmed)")
         lines.extend(
             [
                 f"### {_elapsed_clock(start_ms)}–{_elapsed_clock(end_ms)} · {speaker}",
@@ -163,12 +163,12 @@ def _render_transcript_export(catalog: RecordingCatalog, entry: RecordingEntry) 
             ]
         )
     if not segments:
-        lines.extend(["> 这份录音没有可导出的语音内容。", ""])
+        lines.extend(["> This recording has no speech content to export.", ""])
     lines.extend(
         [
             "---",
             "",
-            "导出说明：以上内容按录音内时间顺序排列，保留完整转写；时间格式为 `时:分:秒`。",
+            "Export note: content is ordered by recording time and preserves the complete transcript; times use `HH:MM:SS`.",
             "",
         ]
     )
@@ -181,33 +181,33 @@ def _render_summary_export(
     state = catalog.summary_state(entry)
     prompt = str(state.get("prompt", "")).strip()
     lines = [
-        f"# {_markdown_text(catalog.effective_title(entry), '未命名录音')}｜总结",
+        f"# {_markdown_text(catalog.effective_title(entry), 'Untitled recording')} | Summary",
         "",
-        f"> 录音日期：{_markdown_text(entry.recorded_at, '未记录')}",
-        f"> 总结主题：{len(topics)} 个",
+        f"> Recording date: {_markdown_text(entry.recorded_at, 'Not recorded')}",
+        f"> Topics: {len(topics)}",
         "",
-        "## 本次整理要求",
+        "## Prompt",
         "",
     ]
-    lines.extend(_markdown_quote(prompt or "按通用规则整理实质话题。"))
-    lines.extend(["", "## 总结内容", ""])
+    lines.extend(_markdown_quote(prompt or "Organize substantive topics using the default rules."))
+    lines.extend(["", "## Summary", ""])
     if not topics:
-        lines.extend(["> 没有找到符合本次整理要求的内容。", ""])
+        lines.extend(["> No content matched this prompt.", ""])
     for index, topic in enumerate(topics, 1):
         keywords = [
             _markdown_text(word) for word in topic.get("keywords", []) if _markdown_text(word)
         ]
         lines.extend(
             [
-                f"### {index:02d}. {_markdown_text(topic.get('title'), '未命名主题')}",
+                f"### {index:02d}. {_markdown_text(topic.get('title'), 'Untitled topic')}",
                 "",
                 (
-                    f"**时间**：`{_elapsed_clock(int(topic.get('start_ms', 0)))}–"
+                    f"**Time**: `{_elapsed_clock(int(topic.get('start_ms', 0)))}-"
                     f"{_elapsed_clock(int(topic.get('end_ms', 0)))}`"
                 ),
-                f"**关键词**：{'、'.join(keywords) if keywords else '无'}",
+                f"**Keywords**: {', '.join(keywords) if keywords else 'None'}",
                 "",
-                str(topic.get("summary", "")).strip() or "暂无摘要。",
+                str(topic.get("summary", "")).strip() or "No summary.",
                 "",
             ]
         )
@@ -215,7 +215,7 @@ def _render_summary_export(
         [
             "---",
             "",
-            "导出说明：本文件只包含按本次提示词筛选后的总结内容；未纳入总结的语音仍保留在完整对话导出和左侧转写中。",
+            "Export note: this file contains only content selected by the prompt; omitted speech remains in the full transcript export and the transcript panel.",
             "",
         ]
     )
@@ -371,18 +371,20 @@ class SummaryPromptPayload(BaseModel):
 DEFAULT_SUMMARY_PROMPTS = (
     {
         "id": "prompt-complete-meeting",
-        "name": "完整会议",
+        "name": "Complete meeting",
         "prompt": (
-            "请按录音时间顺序完整梳理会议内容，不遗漏议题、决定、分工、数字和待办；"
-            "保留不确定信息，不要擅自补全。"
+            "Review the meeting in recording order. Keep the source language of the recording and transcript; "
+            "do not translate it. Include topics, decisions, owners, numbers, and action items. "
+            "Preserve uncertainty and do not invent missing details."
         ),
     },
     {
         "id": "prompt-finance-live",
-        "name": "财经直播",
+        "name": "Finance livestream",
         "prompt": (
-            "只整理主播的财经相关内容：市场观点、个股/行业、宏观数据、风险提示和操作逻辑。"
-            "删除感谢礼物、寒暄、唱歌、闲聊和其他非财经内容，不要把这些内容列入总结。"
+            "Keep only the host's finance-related content: market views, stocks and sectors, macro data, risks, "
+            "and reasoning. Remove gifts, greetings, singing, small talk, and other unrelated content. "
+            "Keep the source language of the recording and transcript; do not translate it."
         ),
     },
 )
@@ -390,7 +392,7 @@ DEFAULT_SUMMARY_PROMPTS = (
 
 def _topic_strength(topic: dict[str, Any], segment_count: int, evidence_count: int) -> str:
     title = str(topic.get("title", "")).strip()
-    if title.startswith(("疑似", "[疑似")):
+    if title.startswith(("[Uncertain", "[Unclear")):
         return "weak"
     if evidence_count < 2 or evidence_count / max(1, segment_count) < 0.2:
         return "weak"
@@ -421,8 +423,8 @@ def _weak_topic_payload(entry: RecordingEntry, segments: list[dict[str, Any]]) -
     last = segments[-1]
     return {
         "id": f"weak-{entry.id}-{first.get('segment_id')}",
-        "title": "零散对话与过渡内容",
-        "summary": "这段语音没有形成集中的明确话题。内容已按原始时间顺序完整保留。",
+        "title": "Scattered dialogue and transitions",
+        "summary": "This speech does not form a focused topic. The content is kept in its original time order.",
         "keywords": [],
         "evidence_segment_ids": [],
         "start_ms": int(first.get("start_ms", 0)),
@@ -445,7 +447,7 @@ def _analysis_topic_payload(
     ]
     return {
         "id": topic.get("topic_id") or f"topic-{first.get('segment_id')}",
-        "title": topic.get("title") or "未命名话题",
+        "title": topic.get("title") or "Untitled topic",
         "summary": topic.get("summary", ""),
         "keywords": topic.get("keywords", []),
         "evidence_segment_ids": evidence,
@@ -1340,14 +1342,14 @@ def _cloud_cost_override_decision(
         return None
     return {
         "strategy": "continue_cloud_with_higher_cap",
-        "title": "提高上限并继续云端识别",
-        "description": "复用已完成的预处理、VAD 和语音分块, 继续使用云端 ASR, 不切换为仅本地。",
+        "title": "Raise the cap and continue with cloud ASR",
+        "description": "Reuse completed preprocessing, VAD, and speech regions; continue with cloud ASR without switching to local-only mode.",
         "impact": (
-            f"按官网原价估算, 云端 ASR 最多约 ¥{asr_cost_cap:.4f}, "
-            f"文本整理最多 ¥{text_cost_cap:.2f}; 新的任务硬上限为 ¥{required_cap:.2f}。"
-            "实际账单可能因免费额度或优惠更低。"
+            f"At list price, cloud ASR may cost up to ¥{asr_cost_cap:.4f} and "
+            f"text review up to ¥{text_cost_cap:.2f}; the new hard task cap is ¥{required_cap:.2f}. "
+            "The actual bill may be lower because of credits or discounts."
         ),
-        "continue_label": f"提高至 ¥{required_cap:.2f} 并继续云端",
+        "continue_label": f"Raise to ¥{required_cap:.2f} and continue",
         "can_continue": True,
         "additional_external_cost_cny": round(max(0.0, required_cap - estimated_cost_cny), 4),
         "cost_cap_cny": required_cap,
@@ -1373,22 +1375,22 @@ def _full_restart_decision(
         4,
     )
     external_impact = (
-        f"可能新增外部费用最多 ¥{remaining_budget:.4f}"
+        f"Up to ¥{remaining_budget:.4f} in additional external cost may be used"
         if run_cloud
-        else "仅运行本地模型, 不产生外部费用"
+        else "Only local models will run; no external cost will be incurred"
     )
     return {
         "strategy": "restart_from_scratch",
-        "title": "清理断点并从头开始",
+        "title": "Clear the checkpoint and restart",
         "description": (
-            "删除本任务已生成的转写、模型缓存和处理清单, 保留上传的原始录音, "
-            "重新执行文件检查和全部处理步骤。"
+            "Delete this task's transcript, model cache, and processing manifest while keeping the uploaded source recording, "
+            "then run file checks and all processing steps again."
         ),
         "impact": (
-            f"不会删除原始录音; {external_impact}。"
-            "如果同一原录音本身损坏, 从头开始仍会报告相同错误。"
+            f"The source recording will not be deleted. {external_impact}. "
+            "If the source recording itself is damaged, the same error will still occur."
         ),
-        "continue_label": "清理缓存并从头开始",
+        "continue_label": "Clear cache and restart",
         "can_continue": True,
         "additional_external_cost_cny": remaining_budget if run_cloud else 0.0,
     }
@@ -1409,10 +1411,10 @@ def _recovery_decision(
     if not source_exists:
         return {
             "strategy": "cannot_continue",
-            "title": "源录音缺失, 不能安全继续",
-            "description": "任务目录中找不到原始录音。请保留记录并重新添加原文件。",
-            "impact": "不会运行模型, 也不会产生新费用。",
-            "continue_label": "无法继续",
+            "title": "The source recording is missing",
+            "description": "The task directory has no source recording. Keep this record and add the original file again.",
+            "impact": "No model will run and no new cost will be incurred.",
+            "continue_label": "Cannot continue",
             "can_continue": False,
             "additional_external_cost_cny": 0.0,
         }
@@ -1436,7 +1438,7 @@ def _recovery_decision(
             "title": title,
             "description": description,
             "impact": impact,
-            "continue_label": "按建议继续",
+            "continue_label": "Continue as recommended",
             "can_continue": True,
             "additional_external_cost_cny": round(additional_cost, 4),
         }
@@ -1457,10 +1459,10 @@ def _recovery_decision(
     if any(marker in normalized for marker in unrecoverable_markers):
         return {
             "strategy": "cannot_continue",
-            "title": "录音文件无法继续处理",
-            "description": "文件缺失、损坏或格式不受支持, 需要重新添加可读取的原录音。",
-            "impact": "不会运行模型, 也不会产生新费用。",
-            "continue_label": "无法继续",
+            "title": "The recording cannot be processed",
+            "description": "The file is missing, damaged, or unsupported. Add a readable copy of the original recording.",
+            "impact": "No model will run and no new cost will be incurred.",
+            "continue_label": "Cannot continue",
             "can_continue": False,
             "additional_external_cost_cny": 0.0,
         }
@@ -1472,7 +1474,11 @@ def _recovery_decision(
         "topic stubs",
         "consolidation",
     )
-    if any(marker in normalized for marker in deepseek_markers):
+    if any(marker in normalized for marker in deepseek_markers) and not (
+        status == "completed"
+        and "text review complete" in normalized
+        and "cost cap" in normalized
+    ):
         if status == "completed":
             text_remaining = max(
                 0.0,
@@ -1480,33 +1486,33 @@ def _recovery_decision(
             )
             repair = decision(
                 "retry_text_review_only",
-                "仅修复文本整理",
-                "复用已完成的 ASR、时间戳、说话人和 DeepSeek 窗口缓存, 只重新校验并完成话题整理。",
-                "不会重新上传音频或产生 ASR 费用; DeepSeek 最多新增 "
-                f"¥{min(remaining_budget, text_remaining):.4f}。失败时仍保留当前转写。",
+                "Repair text review only",
+                "Reuse completed ASR, timestamps, speaker labels, and DeepSeek window caches; validate and finish topic organization only.",
+                "Audio will not be uploaded again and no ASR cost will be added; DeepSeek may use up to "
+                f"¥{min(remaining_budget, text_remaining):.4f}. The current transcript remains available if it fails.",
                 additional_cost=min(remaining_budget, text_remaining),
             )
-            repair["continue_label"] = "仅修复文本整理"
+            repair["continue_label"] = "Repair text review"
             return repair
         return decision(
             "finalize_without_text_review",
-            "跳过文本整理, 直接完成转写",
-            "保留已完成的 ASR、时间戳和说话人结果, 关闭 DeepSeek 后从断点生成最终文档。",
-            "不再调用 DeepSeek; 预计新增外部费用为 ¥0。原始识别文本仍会完整保留。",
+            "Skip text review and finish the transcript",
+            "Keep completed ASR, timestamps, and speaker results; disable DeepSeek and generate the final documents from the checkpoint.",
+            "DeepSeek will not be called again; expected additional external cost is ¥0. The original recognition text remains complete.",
             additional_cost=0.0,
         )
 
     if status == "completed":
-        if "文本整理已完成" in message and "费用上限" in message and remaining_budget > 0:
+        if "text review complete" in normalized and "cost cap" in normalized and remaining_budget > 0:
             extend = decision(
                 "extend_text_review_budget",
-                "是否完成剩余文本窗口",
-                "当前整理结果已经可用; 如继续, 只处理因文本子预算停止的窗口并复用全部缓存。",
-                "不会重新上传音频或产生 ASR 费用; DeepSeek 新增费用最多 "
-                f"¥{remaining_budget:.4f}, 总费用仍不超过 ¥3。",
+                "Finish the remaining text windows",
+                "The current review is available. Continuing processes only windows stopped by the text sub-cap and reuses all caches.",
+                "Audio will not be uploaded again and no ASR cost will be added; DeepSeek may add up to "
+                f"¥{remaining_budget:.4f}, while total cost remains within ¥3.",
                 additional_cost=remaining_budget,
             )
-            extend["continue_label"] = "追加预算完成剩余窗口"
+            extend["continue_label"] = "Add budget and finish remaining windows"
             extend["text_review_cost_cap_cny"] = round(text_review_cost_cny + remaining_budget, 6)
             return extend
         return None
@@ -1515,16 +1521,16 @@ def _recovery_decision(
         if "cloud" in completed_steps:
             return decision(
                 "finalize_without_text_review",
-                "复用已完成云端识别并直接收尾",
-                "云端识别已经完成; 关闭额外文本整理, 只执行剩余本地步骤和文档生成。",
-                "不会新增云端或 DeepSeek 调用; 预计新增外部费用为 ¥0。",
+                "Use completed cloud ASR and finish",
+                "Cloud ASR is complete. Disable extra text review and run only the remaining local steps and document generation.",
+                "No additional cloud or DeepSeek call will be made; expected additional external cost is ¥0.",
                 additional_cost=0.0,
             )
         return decision(
             "continue_local_only",
-            "切换为仅本地模式继续",
-            "费用上限不足以安全完成云端识别; 保留已有缓存, 改用本地识别完成剩余内容。",
-            "不再上传或调用云端, 预计新增外部费用为 ¥0; 准确度可能低于云端增强。",
+            "Continue in local-only mode",
+            "The cost cap is not enough to finish cloud ASR safely. Keep existing caches and use local recognition for the remaining content.",
+            "No upload or cloud call will be made; expected additional external cost is ¥0. Accuracy may be lower than cloud-enhanced recognition.",
             additional_cost=0.0,
         )
 
@@ -1541,9 +1547,9 @@ def _recovery_decision(
     if any(marker in normalized for marker in cloud_configuration_markers):
         return decision(
             "continue_local_only",
-            "切换为仅本地模式继续",
-            "当前云端凭据或上传授权不可用; 不再调用云端, 使用本地缓存和本地模型完成。",
-            "预计新增外部费用为 ¥0; 准确度可能低于云端增强。",
+            "Continue in local-only mode",
+            "Cloud credentials or upload authorization is unavailable. Do not call the cloud; finish with local caches and local models.",
+            "Expected additional external cost is ¥0. Accuracy may be lower than cloud-enhanced recognition.",
             additional_cost=0.0,
         )
 
@@ -1551,16 +1557,16 @@ def _recovery_decision(
         if bool(job.get("allow_cloud_upload")):
             return decision(
                 "resume_fixed_pipeline",
-                "使用已修正的本地 VAD + 云端识别继续",
-                "旧任务的模式组合错误; 新版会同时启用本地切分和云端识别并复用已有缓存。",
-                f"只处理未完成区间, 仍受 ¥3 总上限约束; 剩余外部预算最多 ¥{remaining_budget:.4f}。",
+                "Continue with corrected local VAD and cloud ASR",
+                "The old task used an invalid mode combination. The updated pipeline enables local segmentation and cloud ASR while reusing existing caches.",
+                f"Only unfinished regions will run, still subject to the ¥3 total cap; up to ¥{remaining_budget:.4f} of external budget remains.",
                 additional_cost=remaining_budget,
             )
         return decision(
             "continue_local_only",
-            "按仅本地模式继续",
-            "任务未授权云端上传; 移除错误的云端语音区间选项, 使用本地模型从断点继续。",
-            "不会上传录音, 预计新增外部费用为 ¥0。",
+            "Continue in local-only mode",
+            "Cloud upload is not authorized. Remove the invalid cloud-region option and continue from the checkpoint with local models.",
+            "The recording will not be uploaded; expected additional external cost is ¥0.",
             additional_cost=0.0,
         )
 
@@ -1577,10 +1583,10 @@ def _recovery_decision(
     if any(marker in normalized for marker in local_resource_markers):
         return {
             "strategy": "cannot_continue",
-            "title": "本机资源不足, 暂不能安全继续",
-            "description": "请先释放显存或磁盘空间, 再重新添加同一文件; 已有缓存会按哈希复用。",
-            "impact": "当前不会运行模型, 也不会产生新费用。",
-            "continue_label": "暂无法继续",
+            "title": "Local resources are unavailable",
+            "description": "Free GPU memory or disk space, then add the same file again; existing caches will be reused by hash.",
+            "impact": "No model will run now and no new cost will be incurred.",
+            "continue_label": "Cannot continue yet",
             "can_continue": False,
             "additional_external_cost_cny": 0.0,
         }
@@ -1588,12 +1594,12 @@ def _recovery_decision(
     run_cloud = bool(job.get("run_cloud_enabled", job.get("allow_cloud_upload")))
     return decision(
         "resume_checkpoint",
-        "从最后成功断点继续",
-        "自动重试已经停止; 再次运行只处理尚未成功的区间, 成功缓存不会重做。",
+        "Resume from the last successful checkpoint",
+        "Automatic retries have stopped. Running again processes only unfinished regions; successful caches are not repeated.",
         (
-            f"仍受 ¥3 总上限约束; 可能使用的剩余外部预算最多 ¥{remaining_budget:.4f}。"
+            f"The ¥3 total cap still applies; up to ¥{remaining_budget:.4f} of remaining external budget may be used."
             if run_cloud
-            else "仅运行本地模型, 预计新增外部费用为 ¥0。"
+            else "Only local models will run; expected additional external cost is ¥0."
         ),
         additional_cost=remaining_budget if run_cloud else 0.0,
     )
@@ -1641,7 +1647,7 @@ def _public_job(job_path: Path) -> dict[str, Any]:
     elif text_review_requested and status == "failed":
         text_review_status = "failed"
     elif text_review_requested and status == "completed":
-        if "个窗口因费用上限保留原始识别" in latest_manifest_message:
+        if "windows kept the original recognition because of the cost cap" in latest_manifest_message:
             text_review_status = "partial"
         elif latest_manifest_message or not analysis_exists:
             text_review_status = "fallback"
@@ -1653,30 +1659,30 @@ def _public_job(job_path: Path) -> dict[str, Any]:
     core_transcript_ready = status == "completed" and "render" in completed_steps
     if operation == "text_review_repair" and status == "queued":
         progress = 90
-        stage = "等待修复文本整理"
+        stage = "Waiting for text review repair"
     elif operation == "text_review_repair" and status == "running":
         progress = 95
-        stage = "仅修复文本整理"
+        stage = "Repairing text review"
     elif cancel_requested and status in {"queued", "running"}:
         progress = min(95, 5 + round(90 * len(completed_steps) / max(1, len(expected_steps))))
-        stage = "正在取消"
+        stage = "Cancelling"
     elif status == "cancelled":
         progress = min(95, 5 + round(90 * len(completed_steps) / max(1, len(expected_steps))))
-        stage = "已取消"
+        stage = "Cancelled"
     elif status == "completed":
         progress = 100
         if text_review_status == "fallback":
-            stage = "转写可用 · 文本整理待处理"
+            stage = "Transcript ready · text review pending"
         elif text_review_status == "partial":
-            stage = "转写可用 · 文本整理部分完成"
+            stage = "Transcript ready · text review partially complete"
         else:
-            stage = "转写完成"
+            stage = "Transcription complete"
     elif status == "queued":
         progress = 0
-        stage = "等待断点恢复" if int(job.get("recovery_count", 0) or 0) else "等待开始"
+        stage = "Waiting to resume from checkpoint" if int(job.get("recovery_count", 0) or 0) else "Waiting to start"
     else:
         progress = min(95, 5 + round(90 * len(completed_steps) / max(1, len(expected_steps))))
-        stage = "处理失败" if status == "failed" else "准备与预处理"
+        stage = "Processing failed" if status == "failed" else "Preparing and preprocessing"
         if status != "failed":
             next_step = next((step for step in expected_steps if step not in completed_steps), None)
             if next_step is not None:
@@ -1684,7 +1690,7 @@ def _public_job(job_path: Path) -> dict[str, Any]:
         if status == "running" and bool(job.get("retrying")):
             attempt = int(job.get("attempt_count", 1) or 1)
             maximum = int(job.get("max_attempts", MAX_JOB_ATTEMPTS) or MAX_JOB_ATTEMPTS)
-            stage = f"自动断点重试 {attempt}/{maximum}"
+            stage = f"Automatic checkpoint retry {attempt}/{maximum}"
 
     cached_hit, cached_miss, cached_output = _cached_text_usage(job_path)
     manifest_input = int(manifest.get("text_review_input_tokens", 0) or 0)
@@ -1832,7 +1838,7 @@ def _transcription_command(
     cost_cap_cny: float,
     text_review_cost_cap_cny: float,
 ) -> tuple[list[str], Path]:
-    output = source_path.parent / "transcription" / "转文字文档.md"
+    output = source_path.parent / "transcription" / "transcript.md"
     command = [
         sys.executable,
         "-m",
@@ -1980,8 +1986,8 @@ def _text_review_artifacts(job_path: Path) -> tuple[Path, Path, Path, Path, Path
     transcript_path = work_directory / "transcript.json"
     if not transcript_path.is_file():
         raise FileNotFoundError("completed transcript.json is missing")
-    output_path = job_path.parent / "transcription" / "转文字文档.md"
-    topic_path = output_path.with_name(f"{output_path.stem}_话题索引.md")
+    output_path = job_path.parent / "transcription" / "transcript.md"
+    topic_path = output_path.with_name("topic-index.md")
     cache_directory = work_directory / "providers" / "deepseek"
     return manifest_path, transcript_path, output_path, topic_path, cache_directory
 
@@ -2036,11 +2042,11 @@ def _run_text_review_repair(job_path: Path) -> None:
             errors = [
                 str(item)
                 for item in manifest.get("errors", [])
-                if not str(item).startswith("文本整理已回退")
+                if not str(item).startswith("Text review fallback:")
             ]
             if analysis.window_fallback_count:
                 errors.append(
-                    f"文本整理已完成: {analysis.window_fallback_count} 个窗口因费用上限保留原始识别"
+                    f"Text review complete: {analysis.window_fallback_count} windows kept the original recognition because of the cost cap"
                 )
             completed_steps = list(
                 dict.fromkeys([*manifest.get("completed_steps", []), "deepseek_text"])
@@ -2070,9 +2076,9 @@ def _run_text_review_repair(job_path: Path) -> None:
                 errors = [
                     str(item)
                     for item in manifest.get("errors", [])
-                    if not str(item).startswith("文本整理已回退")
+                    if not str(item).startswith("Text review fallback:")
                 ]
-                manifest["errors"] = [*errors, f"文本整理已回退: {message}"]
+                manifest["errors"] = [*errors, f"Text review fallback: {message}"]
                 _write_json(manifest_path, manifest)
             except (OSError, ValueError, json.JSONDecodeError):
                 pass
@@ -2147,7 +2153,7 @@ def _run_recording_summary(
                 status="running",
                 started_at=time.time(),
                 progress_percent=5,
-                stage="正在读取完整转写",
+                stage="Reading the complete transcript",
                 error=None,
             )
             _write_json(state_path, state)
@@ -2172,9 +2178,9 @@ def _run_recording_summary(
                 user_prompt=prompt or None,
                 progress_callback=report_progress,
             )
-            report_progress(12, "正在准备文本分析")
+            report_progress(12, "Preparing text analysis")
             reviewed, analysis = reviewer.review(document)
-            report_progress(92, "正在保存总结结果")
+            report_progress(92, "Saving summary results")
             result_path = entry.transcript_path.with_name(SUMMARY_RESULT_FILENAME)
             _write_json(
                 result_path,
@@ -2196,7 +2202,7 @@ def _run_recording_summary(
                 status="completed",
                 finished_at=time.time(),
                 progress_percent=100,
-                stage="总结完成",
+                stage="Summary complete",
                 model=analysis.model,
                 cost_cny=analysis.estimated_cost_cny,
                 topic_count=len(analysis.topics),
@@ -2215,7 +2221,7 @@ def _run_recording_summary(
             update_state(
                 status="failed",
                 finished_at=time.time(),
-                stage="总结失败，可重试",
+                stage="Summary failed; try again",
                 error=message,
                 can_retry=failed_attempts < MAX_SUMMARY_ATTEMPTS,
             )
@@ -2318,8 +2324,8 @@ def _recover_incomplete_summaries(catalog: RecordingCatalog) -> None:
                 state.update(
                     status="failed",
                     finished_at=time.time(),
-                    stage="工作台重启，任务已中断",
-                    error="工作台重启，中断了本次总结；可以点击重试。",
+                    stage="Workspace restarted; the task was interrupted",
+                    error="The workspace restarted and interrupted this summary; try again.",
                     can_retry=True,
                 )
                 _write_json(state_path, state)
@@ -2351,8 +2357,8 @@ def _matching_upload_job(
             job = _read_json(job_path)
         except (OSError, ValueError, json.JSONDecodeError):
             continue
-        # “移除记录”只隐藏任务卡。隐藏过的失败任务不能拦截同一文件的新上传,
-        # 否则用户无法通过重新添加原录音获得全新的处理任务。
+        # Dismissing a task only hides its card. A dismissed failed task must not
+        # block a new upload of the same file, so the user can start a fresh task.
         if job.get("dismissed_at"):
             continue
         if job.get("sha256") != sha256 or bool(job.get("allow_cloud_upload")) != allow_cloud_upload:
@@ -2404,7 +2410,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         yield
 
     app = FastAPI(
-        title="语迹 VoiceTrace",
+        title="VoiceTrace",
         docs_url=None,
         redoc_url=None,
         lifespan=lifespan,
@@ -2496,7 +2502,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         content = _render_summary_export(catalog, entry, topics)
         return _markdown_download(
             content,
-            f"{_download_stem(catalog.effective_title(entry))}-总结.md",
+            f"{_download_stem(catalog.effective_title(entry))}-summary.md",
         )
 
     @app.get("/api/recordings/{recording_id}/export/transcript.md", response_model=None)
@@ -2511,7 +2517,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         content = _render_transcript_export(catalog, entry)
         return _markdown_download(
             content,
-            f"{_download_stem(catalog.effective_title(entry))}-完整对话.md",
+            f"{_download_stem(catalog.effective_title(entry))}-transcript.md",
         )
 
     @app.post("/api/recordings/{recording_id}/summary", status_code=202)
@@ -2544,7 +2550,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
                 "requested_at": time.time(),
                 "error": None,
                 "progress_percent": 0,
-                "stage": "等待开始",
+                "stage": "Waiting to start",
                 "attempt_count": attempt_count,
                 "max_attempts": MAX_SUMMARY_ATTEMPTS,
                 "retry_count": max(0, attempt_count - 1),
@@ -2556,8 +2562,8 @@ def create_app(data_root: Path | None = None) -> FastAPI:
                 state.update(
                     status="failed",
                     finished_at=time.time(),
-                    stage="无法启动总结，可重试",
-                    error="总结任务未能启动，请稍后重试。",
+                    stage="Could not start summary; try again",
+                    error="The summary task could not start; try again later.",
                     can_retry=True,
                 )
                 _write_json(state_path, state)

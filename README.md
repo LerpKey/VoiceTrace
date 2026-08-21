@@ -1,75 +1,76 @@
-# 语迹 VoiceTrace
+# VoiceTrace
 
-本地优先的中文语音转文字与录音审阅工作台。
+[English](README.md) · [Chinese](README.zh-CN.md)
 
-语迹把长录音整理成可回听、可检索、可复核的文字，适合会议、访谈、课程和个人录音。录音和转写结果默认保存在本机；云端服务是可选项，工作台默认只上传经过语音活动检测的语音区间。
+A local-first voice transcription and recording review workspace.
 
-## 功能
+VoiceTrace turns long recordings into text that can be replayed, searched, and checked. It is designed for meetings, interviews, classes, and personal recordings. Audio and transcripts stay on the local machine by default. Cloud services are optional, and the workspace uploads only speech intervals selected by local voice activity detection by default.
 
-- 可恢复的长录音流水线：静音切分、语音活动检测（VAD）、重叠去重和 Markdown 渲染；
-- 默认使用云端 ASR、本地 CPU VAD 和 ERes2NetV2 说话人关联；
-- 可选安装并启用本地 Qwen3-ASR，不作为默认路径的硬件要求；
-- 说话人识别、显示名管理和跨片段说话人记忆；
-- 沿时间轴回听录音、阅读转写、查看话题、收藏句子和导出 Markdown；
-- 本地 FastAPI 服务、浏览器审阅界面、命令行入口和 Windows 启动脚本；
-- API Key 从环境变量读取，不写入代码和运行产物。
+## Features
 
-## 当前状态
+- Resumable long-recording pipeline with silence splitting, voice activity detection (VAD), overlap deduplication, and Markdown rendering;
+- Cloud ASR by default, with CPU VAD and CPU ERes2NetV2 speaker association;
+- Optional local Qwen3-ASR support, without making local ASR hardware a default requirement;
+- Speaker identification, display-name management, and cross-segment speaker memory;
+- Timeline playback, transcript reading, topic browsing, sentence favorites, and Markdown export;
+- Local FastAPI service, browser review UI, CLI entry point, and Windows launcher;
+- API keys read from environment variables and never written into source code or runtime artifacts.
 
-版本 `0.1.0` 仍处于开发阶段，当前重点是 Windows 本机个人使用。项目暂不提供多人账号、远程音频存储或可直接暴露到公网的部署方案。
+## Current status
 
-## 快速开始
+Version `0.1.0` is still under development and currently targets personal use on a Windows machine. The project does not yet provide multi-user accounts, remote audio storage, or a deployment configuration suitable for direct public exposure.
 
-需要 Python 3.12、[uv](https://docs.astral.sh/uv/) 和 Node.js 22.13 或更高版本。
+## Quick start
+
+Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/), and Node.js 22.13 or newer.
 
 ```powershell
 uv sync
 cd audio-review-ui
-npm install
+npm ci
 cd ..
 uv run voice-trace --help
 ```
 
-启动录音审阅工作台：
+Start the recording review workspace:
 
 ```powershell
-启动录音文本工作台.bat
+start-voicetrace-workspace.bat
 ```
 
-也可以手动启动：
+Or start it manually:
 
 ```powershell
 uv run voice-trace audio-review --data-dir data
 ```
 
-默认链路会使用 CPU 版 FunASR 做 VAD 和说话人特征提取，不要求 CUDA。
-如果需要本地 Qwen3-ASR，再额外安装本地识别依赖：
+The default path uses CPU FunASR models for VAD and speaker feature extraction, so CUDA is not required. To enable local Qwen3-ASR, install the optional local dependencies:
 
 ```powershell
 uv sync --extra local
 ```
 
-具体的模型准备、API Key 配置和审阅流程见[录音审阅工作台使用手册](docs/reference/audio-review-user-guide.md)。
+See the [audio review user guide](docs/reference/audio-review-user-guide.md) for model preparation, API key configuration, and review workflows.
 
-## 运行模式
+## Operating modes
 
-- 云端增强：需要设置 `DASHSCOPE_API_KEY`；工作台默认先在本地用 CPU VAD 筛选语音区间，再上传这些区间，并用 CPU ERes2NetV2 关联说话人。
-- 本地 ASR：默认关闭；安装 `local` 可选依赖、准备 Qwen3-ASR 模型，并显式传入 `--local` 才会启用。该路径需要 CUDA。
-- 文本整理与总结：需要时设置 `DEEPSEEK_API_KEY`；原始转写不会被总结流程覆盖。
+- Cloud enhancement: set `DASHSCOPE_API_KEY`. The workspace filters speech intervals with local CPU VAD, uploads only those intervals, and associates speakers with CPU ERes2NetV2.
+- Local ASR: disabled by default. Install the `local` extra, prepare the Qwen3-ASR model, and pass `--local` explicitly. This path requires CUDA.
+- Text review and summaries: set `DEEPSEEK_API_KEY` when needed. The original transcript is never overwritten by the summary flow.
 
-模型默认放在 `data/models/audio`，也可以通过 `VOICETRACE_AUDIO_MODEL_DIR` 或 `--model-dir` 指定其他目录。
+Models are stored in `data/models/audio` by default. Use `VOICETRACE_AUDIO_MODEL_DIR` or `--model-dir` to select another directory.
 
-## 项目结构
+## Project structure
 
 ```text
-research_kb/                 Python 运行时、API 和命令行入口
-audio-review-ui/             浏览器审阅界面
-docs/                        使用手册和模型说明
-tests/                       单元测试和项目约束测试
-data/models/audio/           本地模型目录占位，不提交模型权重
+research_kb/                 Python runtime, API, and CLI entry points
+audio-review-ui/             Browser review UI
+docs/                        User guides and model notes
+tests/                       Unit and governance tests
+data/models/audio/           Local model directory placeholder; weights are not committed
 ```
 
-## 开发与检查
+## Development and checks
 
 ```powershell
 uv sync --extra dev
@@ -77,15 +78,16 @@ uv run pytest
 uv run ruff check .
 cd audio-review-ui
 npm test
+npm run lint
 ```
 
-开发 benchmark、模型、缓存、录音和转写结果只保留在本地，不进入 Git。不要提交 `.env`、API Key、私钥、录音、模型权重或个人转写内容。
+Keep development benchmarks, models, caches, recordings, and transcripts local. Do not commit `.env` files, API keys, private keys, recordings, model weights, or personal transcripts.
 
-## 文档
+## Documentation
 
-- [录音审阅工作台使用手册](docs/reference/audio-review-user-guide.md)
-- [模型打包与安装约定](docs/model-packaging.md)
+- [Audio review user guide](docs/reference/audio-review-user-guide.md) · [Chinese](docs/reference/audio-review-user-guide.zh-CN.md)
+- [Model packaging](docs/model-packaging.md) · [Chinese](docs/model-packaging.zh-CN.md)
 
-## 许可证
+## License
 
-当前仓库尚未附带许可证文件。项目维护者确定许可证并提交 `LICENSE` 之前，不应将本项目视为已经授予公众自由使用、修改或分发的权利。
+This repository does not currently include a license file. Until the maintainers choose a license and add `LICENSE`, the project should not be treated as granting the public permission to use, modify, or distribute it.

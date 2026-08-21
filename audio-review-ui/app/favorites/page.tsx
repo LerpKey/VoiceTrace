@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { announceFavoriteChange, FAVORITES_CHANNEL } from "../favorite-events";
+import { LanguageSwitcher, localizeServerText, Locale, useLocale } from "../locale";
 
 const API = process.env.NEXT_PUBLIC_AUDIO_API ?? "http://127.0.0.1:8765";
 
@@ -28,9 +29,9 @@ function elapsed(ms: number) {
   return [hours, minutes, remainder].map((part) => String(part).padStart(2, "0")).join(":");
 }
 
-function actualTime(recordedAt: string, offsetMs: number) {
+function actualTime(recordedAt: string, offsetMs: number, locale: Locale) {
   const date = new Date(new Date(recordedAt).getTime() + offsetMs);
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -38,8 +39,8 @@ function actualTime(recordedAt: string, offsetMs: number) {
   }).format(date);
 }
 
-function recordingDate(recordedAt: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
+function recordingDate(recordedAt: string, locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -47,6 +48,7 @@ function recordingDate(recordedAt: string) {
 }
 
 export default function FavoritesPage() {
+  const { locale, setLocale, t } = useLocale();
   const [favorites, setFavorites] = useState<FavoriteSummary[]>([]);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState("");
@@ -59,20 +61,20 @@ export default function FavoritesPage() {
   const loadFavorites = useCallback(async (signal?: AbortSignal) => {
     try {
       const response = await fetch(`${API}/api/favorites`, { signal });
-      if (!response.ok) throw new Error("无法读取收藏汇总");
+      if (!response.ok) throw new Error(t("readFavoriteSummary"));
       setFavorites((await response.json()) as FavoriteSummary[]);
       setError("");
     } catch (caught) {
       if (caught instanceof Error && caught.name === "AbortError") return;
-      setError(caught instanceof Error ? caught.message : "无法读取收藏汇总");
+      setError(caught instanceof Error ? localizeServerText(locale, caught.message) : t("readFavoriteSummary"));
     }
-  }, []);
+  }, [locale, t]);
 
   useEffect(() => {
     const controller = new AbortController();
     void fetch(`${API}/api/favorites`, { signal: controller.signal })
       .then((response) => {
-        if (!response.ok) throw new Error("无法读取收藏汇总");
+        if (!response.ok) throw new Error(t("readFavoriteSummary"));
         return response.json() as Promise<FavoriteSummary[]>;
       })
       .then((data) => {
@@ -80,7 +82,7 @@ export default function FavoritesPage() {
         setError("");
       })
       .catch((caught: Error) => {
-        if (caught.name !== "AbortError") setError(caught.message);
+        if (caught.name !== "AbortError") setError(localizeServerText(locale, caught.message));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -103,18 +105,18 @@ export default function FavoritesPage() {
       document.removeEventListener("visibilitychange", refreshWhenActive);
       window.clearInterval(refreshTimer);
     };
-  }, [loadFavorites]);
+  }, [loadFavorites, locale, t]);
 
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase("zh-CN");
+    const normalized = query.trim().toLocaleLowerCase(locale === "zh-CN" ? "zh-CN" : "en-US");
     if (!normalized) return favorites;
     return favorites.filter((favorite) =>
       [favorite.recording_title, favorite.speaker, favorite.text, favorite.note]
         .join(" ")
-        .toLocaleLowerCase("zh-CN")
+        .toLocaleLowerCase(locale === "zh-CN" ? "zh-CN" : "en-US")
         .includes(normalized),
     );
-  }, [favorites, query]);
+  }, [favorites, locale, query]);
 
   const groups = useMemo(() => {
     const grouped = new Map<string, FavoriteSummary[]>();
@@ -143,7 +145,7 @@ export default function FavoritesPage() {
         },
       );
       const payload = (await response.json()) as FavoriteSummary & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法保存备注");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("saveNoteError"));
       setFavorites((current) =>
         current.map((item) =>
           item.recording_id === favorite.recording_id && item.segment_id === favorite.segment_id
@@ -155,7 +157,7 @@ export default function FavoritesPage() {
       setEditing("");
       announceFavoriteChange();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "无法保存备注");
+      setError(caught instanceof Error ? localizeServerText(locale, caught.message) : t("saveNoteError"));
     } finally {
       setSaving("");
     }
@@ -177,30 +179,31 @@ export default function FavoritesPage() {
     <main className="favorites-workspace">
       <header className="favorites-header">
         <div className="brand">
-          <span className="brand-mark">藏</span>
-          <div><h1>收藏语句汇总</h1><p>跨越所有录音，集中整理值得保留的片段</p></div>
+          <span className="brand-mark">V</span>
+          <div><h1>{t("favoritesTitle")}</h1><p>{t("favoritesSubtitle")}</p></div>
         </div>
         <div className="favorites-header-actions">
+          <LanguageSwitcher locale={locale} onChange={setLocale} />
           <button
             className="quiet-button"
             type="button"
             disabled={refreshing}
             onClick={() => void refreshFavorites()}
-          >{refreshing ? "刷新中…" : "刷新收藏"}</button>
-          <Link className="quiet-button" href="/">返回录音工作台</Link>
+          >{refreshing ? t("refreshing") : t("refreshFavorites")}</button>
+          <Link className="quiet-button" href="/">{t("backToWorkspace")}</Link>
         </div>
       </header>
 
-      <section className="favorites-overview" aria-label="收藏统计">
-        <div><strong>{favorites.length}</strong><span>收藏语句</span></div>
-        <div><strong>{recordingCount}</strong><span>份录音</span></div>
-        <div><strong>{noteCount}</strong><span>条备注</span></div>
+      <section className="favorites-overview" aria-label={t("favoriteStats")}>
+        <div><strong>{favorites.length}</strong><span>{t("favoriteSentences")}</span></div>
+        <div><strong>{recordingCount}</strong><span>{t("recordingCount")}</span></div>
+        <div><strong>{noteCount}</strong><span>{t("noteCount")}</span></div>
         <label className="favorites-search">
-          <span>搜索收藏、说话人或备注</span>
+          <span>{t("searchFavorites")}</span>
           <input
             type="search"
             value={query}
-            placeholder="输入关键词"
+            placeholder={t("keywordPlaceholder")}
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
@@ -210,11 +213,11 @@ export default function FavoritesPage() {
 
       <div className="favorites-content">
         {loading ? (
-          <div className="favorites-empty"><strong>正在汇总收藏…</strong></div>
+          <div className="favorites-empty"><strong>{t("aggregatingFavorites")}</strong></div>
         ) : groups.length === 0 ? (
           <div className="favorites-empty">
-            <strong>{query ? "没有匹配的收藏" : "还没有收藏语句"}</strong>
-            <p>{query ? "换一个关键词试试。" : "回到录音工作台，点击句子旁的星标即可收藏。"}</p>
+            <strong>{query ? t("noMatchingFavorites") : t("noFavoriteSentences")}</strong>
+            <p>{query ? t("tryAnotherKeyword") : t("favoriteHint")}</p>
           </div>
         ) : groups.map((items) => {
           const recording = items[0];
@@ -222,10 +225,10 @@ export default function FavoritesPage() {
             <section className="favorite-recording-group" key={recording.recording_id}>
               <div className="favorite-group-heading">
                 <div>
-                  <span>{recordingDate(recording.recorded_at)}</span>
+                  <span>{recordingDate(recording.recorded_at, locale)}</span>
                   <h2>{recording.recording_title}</h2>
                 </div>
-                <strong>{items.length} 条</strong>
+                <strong>{t("favoriteCount", { count: items.length })}</strong>
               </div>
               <div className="favorite-summary-list">
                 {items.map((favorite) => {
@@ -236,19 +239,19 @@ export default function FavoritesPage() {
                       <div className="favorite-sentence-meta">
                         <span>{favorite.speaker}</span>
                         <time>
-                          实际 {actualTime(favorite.recorded_at, favorite.start_ms)} · 录音内 {elapsed(favorite.start_ms)}
+                          {t("actual")} {actualTime(favorite.recorded_at, favorite.start_ms, locale)} · {t("elapsed")} {elapsed(favorite.start_ms)}
                         </time>
                       </div>
                       <p className="favorite-sentence-text">{favorite.text}</p>
                       <div className="favorite-note-area">
-                        <span className="favorite-note-label">备注</span>
+                        <span className="favorite-note-label">{t("note")}</span>
                         {isEditing ? (
                           <div className="favorite-note-editor">
                             <textarea
                               autoFocus
                               maxLength={2_000}
                               value={drafts[key] ?? ""}
-                              placeholder="写下后续事项、背景或你的想法"
+                              placeholder={t("notePlaceholder")}
                               onChange={(event) =>
                                 setDrafts((current) => ({
                                   ...current,
@@ -262,22 +265,22 @@ export default function FavoritesPage() {
                                 className="note-cancel"
                                 type="button"
                                 onClick={() => setEditing("")}
-                              >取消</button>
+                              >{t("cancel")}</button>
                               <button
                                 type="button"
                                 disabled={saving === key}
                                 onClick={() => void saveNote(favorite)}
-                              >{saving === key ? "保存中…" : "保存备注"}</button>
+                              >{saving === key ? t("saving") : t("saveNote")}</button>
                             </div>
                           </div>
                         ) : (
                           <button
                             className={`favorite-note-preview ${favorite.note ? "has-note" : ""}`}
                             type="button"
-                            title={favorite.note || "点击添加备注"}
+                            title={favorite.note || t("addNote")}
                             onClick={() => beginEditing(favorite)}
                           >
-                            {favorite.note || "＋ 点击添加备注"}
+                            {favorite.note || t("addNote")}
                           </button>
                         )}
                       </div>

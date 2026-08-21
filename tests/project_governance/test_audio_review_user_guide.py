@@ -1,6 +1,7 @@
 """Keep the audio-review manual aligned with the live launcher and UI."""
 
 import re
+import subprocess
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -9,8 +10,10 @@ from research_kb.cli import app
 
 ROOT = Path(__file__).resolve().parents[2]
 MANUAL = ROOT / "docs/reference/audio-review-user-guide.md"
-WINDOWS_LAUNCHER = ROOT / "启动录音文本工作台.bat"
+WINDOWS_LAUNCHER = ROOT / "start-voicetrace-workspace.bat"
 LONG_OPTION = re.compile(r"--[a-z][a-z-]+")
+CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+ALLOWED_CJK_PATHS = {"audio-review-ui/app/locale.tsx"}
 
 
 def test_audio_review_manual_covers_live_launcher_and_primary_ui() -> None:
@@ -24,11 +27,17 @@ def test_audio_review_manual_covers_live_launcher_and_primary_ui() -> None:
 
     workspace = (ROOT / "audio-review-ui/app/page.tsx").read_text(encoding="utf-8")
     favorites = (ROOT / "audio-review-ui/app/favorites/page.tsx").read_text(encoding="utf-8")
-    for label in ("管理录音", "管理说话人", "校准开始时间", "收藏汇总", "添加录音"):
-        assert label in workspace
+    for key, label in (
+        ("manageRecordings", "Manage recordings"),
+        ("manageSpeakers", "Manage speakers"),
+        ("calibrateStart", "Calibrate start time"),
+        ("favoritesSummary", "Favorites summary"),
+        ("addRecording", "Add recording"),
+    ):
+        assert f't("{key}")' in workspace
         assert label in manual
-    for label in ("刷新收藏", "保存备注"):
-        assert label in favorites
+    for key, label in (("refreshFavorites", "Refresh favorites"), ("saveNote", "Save note")):
+        assert f't("{key}")' in favorites
         assert label in manual
 
 
@@ -46,3 +55,24 @@ def test_windows_launcher_starts_the_workspace_from_its_own_directory() -> None:
     assert "http://localhost:3000/" in launcher
     assert "http://127.0.0.1:8765/api/health" in launcher
     assert WINDOWS_LAUNCHER.name in manual
+
+
+def test_tracked_cjk_is_limited_to_chinese_docs_and_locale_resource() -> None:
+    tracked = subprocess.run(
+        ["git", "ls-files"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+    offenders: list[str] = []
+    for relative in tracked:
+        if relative.endswith(".zh-CN.md") or relative in ALLOWED_CJK_PATHS:
+            continue
+        path = ROOT / relative
+        if not path.is_file():
+            continue
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if CJK.search(line):
+                offenders.append(f"{relative}:{line_number}:{line.strip()}")
+    assert not offenders, "CJK text escaped the bilingual allowlist:\n" + "\n".join(offenders)

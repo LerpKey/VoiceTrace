@@ -1,33 +1,32 @@
-# 模型打包与安装约定
+# Local Audio Model Packaging
 
-## 产品默认链路
+[English](model-packaging.md) · [Chinese](model-packaging.zh-CN.md)
 
-正常产品入口只提供低成本云端增强选项，默认开启。开启后，流水线使用 CPU VAD
-筛选语音区间，再使用 CPU ERes2NetV2 关联跨片段说话人，最后只把语音区间发送到云端
-ASR。云端完整上传和本地 Qwen3-ASR 都不作为工作台默认入口。
+This is the default directory for local audio models. Model files are not committed to Git. Use `VOICETRACE_AUDIO_MODEL_DIR` or `--model-dir` to select another directory.
 
-## 模型分层
+## Product default path
 
-| 模型 | 默认发行版 | 用途 |
+The normal product entry point exposes a low-cost cloud enhancement option and enables it by default. The pipeline uses CPU VAD to select speech intervals, CPU ERes2NetV2 to associate speakers across chunks, and sends only those speech intervals to cloud ASR. Full cloud upload and local Qwen3-ASR are not default workspace paths.
+
+## Model layers
+
+| Model | Default distribution | Purpose |
 |---|---|---|
-| `fsmn-vad` | 应随正式安装包预装 | 判断哪些区间是真正的人声，减少云端上传和费用 |
-| `ERes2NetV2` | 应随正式安装包预装 | CPU 关联不同切片中的同一说话人 |
-| `Qwen3-ASR-1.7B` | 不预装 | 仅供用户主动启用本地 ASR |
+| `fsmn-vad` | Preinstall with a production package | Identify actual speech intervals and reduce cloud upload and cost |
+| `ERes2NetV2` | Preinstall with a production package | Associate the same speaker across audio chunks on CPU |
+| `Qwen3-ASR-1.7B` | Do not preinstall | Optional local ASR when explicitly enabled |
 
-开发源码仓库不提交模型权重。正式发行版可以把前两个小模型作为独立模型资源包，
-由安装器复制到用户选择的模型根目录；这不等同于把权重提交到 Git 仓库。
+The source repository does not include model weights. A production distribution may ship the first two small models as a separate model resource package and let the installer copy them into the user's selected model root. That is different from committing weights to Git.
 
-## 目录约定
+## Directory convention
 
 ```text
-<用户选择的模型根目录>/
+<selected model root>/
 ├─ fsmn-vad/
 ├─ ERes2NetV2/
-└─ Qwen3-ASR-1.7B/    # 可选
+└─ Qwen3-ASR-1.7B/    # optional
 ```
 
-开发时可以通过 `VOICETRACE_AUDIO_MODEL_DIR` 或 `--model-dir` 指定根目录。命令行默认也走
-低成本云端模式；`--no-cloud --local --no-allow-cloud-upload --full-cloud` 可显式切换为纯本地
-调试路径，完整云端上传则只应在明确授权的高级场景使用 `--full-cloud`。
-运行时缺少必需的小模型会自动下载；正式安装器应优先使用随包资源，避免首次启动等待
-下载。模型更新可在后续增加版本清单、哈希校验和原子替换，不影响当前目录约定。
+During development, set `VOICETRACE_AUDIO_MODEL_DIR` or pass `--model-dir`. The CLI also defaults to the low-cost cloud path. `--no-cloud --local --no-allow-cloud-upload --full-cloud` explicitly selects the local-only debugging path; full cloud upload should be used only when it has been deliberately authorized with `--full-cloud`.
+
+When required small models are missing, the runtime downloads them on first use. A production installer should prefer bundled resources to avoid a long first launch. Future model updates can add a version manifest, hash verification, and atomic replacement without changing the current directory convention.

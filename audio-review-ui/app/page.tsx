@@ -3,6 +3,15 @@
 import Link from "next/link";
 import { ChangeEvent, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { announceFavoriteChange } from "./favorite-events";
+import {
+  formatMessage,
+  LanguageSwitcher,
+  localizeServerText,
+  localizedPromptName,
+  localizedStage,
+  Locale,
+  useLocale,
+} from "./locale";
 
 const API = process.env.NEXT_PUBLIC_AUDIO_API ?? "http://127.0.0.1:8765";
 const WINDOW_MS = 30 * 60_000;
@@ -148,29 +157,29 @@ type TranscriptionJob = {
 const SUMMARY_EXAMPLES: SummaryPrompt[] = [
   {
     id: "prompt-complete-meeting",
-    name: "完整会议",
-    prompt: "请按录音时间顺序完整梳理会议内容，不遗漏议题、决定、分工、数字和待办；保留不确定信息，不要擅自补全。",
+    name: "Complete meeting",
+    prompt: "Review the meeting in recording order. Keep the source language of the recording and transcript; do not translate it. Include topics, decisions, owners, numbers, and action items. Preserve uncertainty and do not invent missing details.",
   },
   {
     id: "prompt-finance-live",
-    name: "财经直播",
-    prompt: "只整理主播的财经相关内容：市场观点、个股/行业、宏观数据、风险提示和操作逻辑。删除感谢礼物、寒暄、唱歌、闲聊和其他非财经内容，不要把这些内容列入总结。",
+    name: "Finance livestream",
+    prompt: "Keep only the host's finance-related content: market views, stocks and sectors, macro data, risks, and reasoning. Remove gifts, greetings, singing, small talk, and other unrelated content. Keep the source language of the recording and transcript; do not translate it.",
   },
 ];
 
 const UNCERTAIN_FLAGS = new Set(["models_disagree", "no_majority", "sensitive_difference", "vad_supplement"]);
 
 function isUncertainSentence(sentence: Sentence) {
-  return sentence.text.startsWith("[疑似：") || sentence.flags.some((flag) => UNCERTAIN_FLAGS.has(flag));
+  return sentence.text.startsWith("[Uncertain:") || sentence.text.startsWith("[Unclear]") || sentence.flags.some((flag) => UNCERTAIN_FLAGS.has(flag));
 }
 
-function recordingOptionLabel(recording: Recording) {
+function recordingOptionLabel(recording: Recording, locale: Locale) {
   if (
     recording.title_overridden &&
     recording.original_title &&
     recording.original_title !== recording.title
   ) {
-    return `${recording.title}（原文件：${recording.original_title}）`;
+    return `${recording.title} (${formatMessage(locale, "originalFile", { name: recording.original_title })})`;
   }
   return recording.title;
 }
@@ -181,24 +190,24 @@ function recordingMonthKey(recordedAt: string) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function recordingMonthLabel(monthKey: string) {
-  if (monthKey === "unknown") return "日期未确定";
+function recordingMonthLabel(monthKey: string, locale: Locale) {
+  if (monthKey === "unknown") return formatMessage(locale, "dateUnknown");
   const [year, month] = monthKey.split("-");
-  return `${year}年${Number(month)}月`;
+  return formatMessage(locale, "monthLabel", { year, month: Number(month) });
 }
 
-function sortRecordingsByTitle(left: Recording, right: Recording) {
-  return left.title.localeCompare(right.title, "zh-CN", { numeric: true, sensitivity: "base" });
+function sortRecordingsByTitle(left: Recording, right: Recording, locale: Locale) {
+  return left.title.localeCompare(right.title, locale === "zh-CN" ? "zh-CN" : "en", { numeric: true, sensitivity: "base" });
 }
 
-function jobCompletionSummary(job: TranscriptionJob) {
+function jobCompletionSummary(job: TranscriptionJob, locale: Locale) {
   if (job.core_transcript_ready && job.text_review_status === "fallback") {
-    return `核心转写已完成 · 文本整理待处理 · ${job.completed_steps.length} 个阶段已完成`;
+    return formatMessage(locale, "coreReadyPending", { count: job.completed_steps.length });
   }
   if (job.core_transcript_ready && job.text_review_status === "partial") {
-    return `核心转写已完成 · 文本整理部分完成 · ${job.completed_steps.length} 个阶段已完成`;
+    return formatMessage(locale, "coreReadyPartial", { count: job.completed_steps.length });
   }
-  return `${job.completed_steps.length} 个阶段已完成`;
+  return formatMessage(locale, "stagesComplete", { count: job.completed_steps.length });
 }
 
 function jobRecoveryOptions(job: TranscriptionJob) {
@@ -214,11 +223,11 @@ function clock(ms: number) {
   return [h, m, s].map((part) => String(part).padStart(2, "0")).join(":");
 }
 
-function actualClock(recordedAt: string, ms: number) {
+function actualClock(recordedAt: string, ms: number, locale: Locale) {
   const date = new Date(new Date(recordedAt).getTime() + ms);
   return Number.isNaN(date.getTime())
     ? clock(ms)
-    : new Intl.DateTimeFormat("zh-CN", {
+    : new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
@@ -226,9 +235,9 @@ function actualClock(recordedAt: string, ms: number) {
       }).format(date);
 }
 
-function actualRange(recordedAt: string, startMs: number, endMs: number) {
+function actualRange(recordedAt: string, startMs: number, endMs: number, locale: Locale) {
   const recordedTime = new Date(recordedAt).getTime();
-  if (Number.isNaN(recordedTime)) return "实际时间未知";
+  if (Number.isNaN(recordedTime)) return formatMessage(locale, "actualTimeUnknown");
 
   const start = new Date(recordedTime + startMs);
   const end = new Date(recordedTime + endMs);
@@ -236,14 +245,14 @@ function actualRange(recordedAt: string, startMs: number, endMs: number) {
     start.getFullYear() !== end.getFullYear() ||
     start.getMonth() !== end.getMonth() ||
     start.getDate() !== end.getDate();
-  const formatter = new Intl.DateTimeFormat("zh-CN", {
+  const formatter = new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", {
     ...(crossesDay ? { month: "2-digit", day: "2-digit" } : {}),
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
   });
-  return `${formatter.format(start)} 至 ${formatter.format(end)}`;
+  return `${formatter.format(start)} – ${formatter.format(end)}`;
 }
 
 function dateTimeInputValue(recordedAt: string) {
@@ -257,31 +266,33 @@ function recordingOffset(recordedAt: string) {
   return recordedAt.match(/(Z|[+-]\d{2}:\d{2})$/)?.[1] ?? "+08:00";
 }
 
-function statusText(recording: Recording) {
-  if (recording.status === "completed") return `${recording.segment_count.toLocaleString()} 条语音`;
-  if (recording.status === "available_with_warning") return `${recording.segment_count.toLocaleString()} 条语音 · 已本地回退整理`;
-  if (recording.status === "failed") return "处理遇到问题";
-  return "转写处理中";
+function statusText(recording: Recording, locale: Locale) {
+  const count = recording.segment_count.toLocaleString(locale === "zh-CN" ? "zh-CN" : "en-US");
+  if (recording.status === "completed") return formatMessage(locale, "statusCompleted", { count });
+  if (recording.status === "available_with_warning") return formatMessage(locale, "statusWarning", { count });
+  if (recording.status === "failed") return formatMessage(locale, "statusFailed");
+  return formatMessage(locale, "statusProcessing");
 }
 
-function activityText(event: ActivityEvent) {
+function activityText(event: ActivityEvent, locale: Locale) {
   const details = event.details;
-  if (event.action === "favorite_added") return `收藏了 ${clock(Number(details.start_ms ?? 0))} 的语句`;
-  if (event.action === "favorite_removed") return `取消收藏 ${clock(Number(details.start_ms ?? 0))} 的语句`;
-  if (event.action === "favorite_note_updated") return "更新了收藏语句的备注";
-  if (event.action === "favorite_note_cleared") return "清空了收藏语句的备注";
-  if (event.action === "speaker_override_removed") return `恢复“${String(details.source_speaker ?? "说话人")}”的原始名称`;
+  if (event.action === "favorite_added") return formatMessage(locale, "activityFavoriteAdded", { time: clock(Number(details.start_ms ?? 0)) });
+  if (event.action === "favorite_removed") return formatMessage(locale, "activityFavoriteRemoved", { time: clock(Number(details.start_ms ?? 0)) });
+  if (event.action === "favorite_note_updated") return formatMessage(locale, "activityNoteUpdated");
+  if (event.action === "favorite_note_cleared") return formatMessage(locale, "activityNoteCleared");
+  if (event.action === "speaker_override_removed") return formatMessage(locale, "activitySpeakerReset", { speaker: String(details.source_speaker ?? "Speaker") });
   if (event.action === "speaker_override_updated") {
-    return `将“${String(details.source_speaker ?? "说话人")}”全局显示为“${String(details.display_name ?? "")}”`;
+    return formatMessage(locale, "activitySpeakerUpdated", { speaker: String(details.source_speaker ?? "Speaker"), name: String(details.display_name ?? "") });
   }
-  if (event.action === "recording_title_updated") return `录音改名为“${String(details.title ?? "")}”`;
-  if (event.action === "recording_title_reset") return `恢复录音原名“${String(details.title ?? "")}”`;
-  if (event.action === "recording_hidden") return `从工作台移除录音“${String(details.title ?? "")}”`;
-  if (event.action === "recording_restored") return `恢复录音“${String(details.title ?? "")}”`;
+  if (event.action === "recording_title_updated") return formatMessage(locale, "activityTitleUpdated", { title: String(details.title ?? "") });
+  if (event.action === "recording_title_reset") return formatMessage(locale, "activityTitleReset", { title: String(details.title ?? "") });
+  if (event.action === "recording_hidden") return formatMessage(locale, "activityHidden", { title: String(details.title ?? "") });
+  if (event.action === "recording_restored") return formatMessage(locale, "activityRestored", { title: String(details.title ?? "") });
   return event.action;
 }
 
 export default function Home() {
+  const { locale, setLocale, t } = useLocale();
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -369,13 +380,13 @@ export default function Home() {
   );
   const visibleJobs = activeJobs.length > 0 ? jobs.slice(0, 5) : jobs.slice(0, 3);
   const recordingGroups = useMemo(() => {
-    const query = recordingPickerQuery.trim().toLocaleLowerCase("zh-CN");
+    const query = recordingPickerQuery.trim().toLocaleLowerCase(locale === "zh-CN" ? "zh-CN" : "en-US");
     const matches = recordings.filter((recording) =>
-      !query || recording.title.toLocaleLowerCase("zh-CN").includes(query)
-        || recording.original_title?.toLocaleLowerCase("zh-CN").includes(query),
+      !query || recording.title.toLocaleLowerCase(locale === "zh-CN" ? "zh-CN" : "en-US").includes(query)
+        || recording.original_title?.toLocaleLowerCase(locale === "zh-CN" ? "zh-CN" : "en-US").includes(query),
     );
     const grouped = new Map<string, Recording[]>();
-    [...matches].sort(sortRecordingsByTitle).forEach((recording) => {
+    [...matches].sort((left, right) => sortRecordingsByTitle(left, right, locale)).forEach((recording) => {
       const month = recordingMonthKey(recording.recorded_at);
       grouped.set(month, [...(grouped.get(month) ?? []), recording]);
     });
@@ -385,8 +396,8 @@ export default function Home() {
         if (right === "unknown") return -1;
         return right.localeCompare(left);
       })
-      .map(([key, items]) => ({ key, label: recordingMonthLabel(key), recordings: items }));
-  }, [recordingPickerQuery, recordings]);
+      .map(([key, items]) => ({ key, label: recordingMonthLabel(key, locale), recordings: items }));
+  }, [locale, recordingPickerQuery, recordings]);
   const activeRecordingGroup = recordingGroups.find((group) => group.key === activeRecordingMonth)
     ?? recordingGroups[0]
     ?? null;
@@ -412,19 +423,19 @@ export default function Home() {
       fetch(`${API}/api/recordings/${recordingId}/activity?limit=100`),
     ]);
     if (!speakerResponse.ok || !favoriteResponse.ok || !activityResponse.ok) {
-      throw new Error("无法读取说话人与收藏记录");
+      throw new Error(t("readSpeakersFavorites"));
     }
     return {
       speakers: (await speakerResponse.json()) as SpeakerInfo[],
       favorites: (await favoriteResponse.json()) as Favorite[],
       activity: (await activityResponse.json()) as ActivityEvent[],
     };
-  }, []);
+  }, [t]);
 
   const loadRecordings = useCallback(async () => {
     try {
       const response = await fetch(`${API}/api/recordings`);
-      if (!response.ok) throw new Error("本地录音服务暂时不可用");
+      if (!response.ok) throw new Error(t("serviceUnavailable"));
       const data = (await response.json()) as Recording[];
       setRecordings(data);
       setSelectedId((current) =>
@@ -434,32 +445,32 @@ export default function Home() {
       );
       setError("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "无法读取录音");
+      setError(caught instanceof Error ? localizeServerText(locale, caught.message) : t("readRecordings"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [locale, t]);
 
   const loadJobs = useCallback(async () => {
     const response = await fetch(`${API}/api/jobs`);
-    if (!response.ok) throw new Error("无法读取转写任务进度");
+    if (!response.ok) throw new Error(t("readJobs"));
     const data = (await response.json()) as TranscriptionJob[];
     setJobs(data);
     if (data.some((job) => job.status === "queued" || job.status === "running")) {
       setShowUpload(true);
     }
-  }, []);
+  }, [t]);
 
   const loadSummaryPrompts = useCallback(async () => {
     try {
       const response = await fetch(`${API}/api/summary-prompts`);
-      if (!response.ok) throw new Error("无法读取提示词库");
+      if (!response.ok) throw new Error(t("readPrompts"));
       const data = (await response.json()) as SummaryPrompt[];
       if (data.length) setSummaryPrompts(data);
     } catch {
       // Keep the two local starter prompts available when the API is temporarily offline.
     }
-  }, []);
+  }, [t]);
 
   const loadManagedRecordings = useCallback(async (query = "") => {
     setLoadingRecordingCatalog(true);
@@ -468,7 +479,7 @@ export default function Home() {
       const params = new URLSearchParams({ include_hidden: "true" });
       if (query.trim()) params.set("q", query.trim());
       const response = await fetch(`${API}/api/recordings?${params.toString()}`);
-      if (!response.ok) throw new Error("无法读取录音目录");
+      if (!response.ok) throw new Error(t("readCatalog"));
       const data = (await response.json()) as Recording[];
       setManagedRecordings(data);
       setRecordingDrafts(
@@ -477,7 +488,7 @@ export default function Home() {
     } finally {
       setLoadingRecordingCatalog(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadSummaryPrompts(), 0);
@@ -488,7 +499,7 @@ export default function Home() {
     const controller = new AbortController();
     void fetch(`${API}/api/recordings`, { signal: controller.signal })
       .then((response) => {
-        if (!response.ok) throw new Error("本地录音服务暂时不可用");
+        if (!response.ok) throw new Error(t("serviceUnavailable"));
         return response.json() as Promise<Recording[]>;
       })
       .then((data) => {
@@ -497,11 +508,11 @@ export default function Home() {
         setError("");
       })
       .catch((caught: Error) => {
-        if (caught.name !== "AbortError") setError(caught.message);
+        if (caught.name !== "AbortError") setError(localizeServerText(locale, caught.message));
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, []);
+  }, [locale, t]);
 
   useEffect(() => {
     const initial = window.setTimeout(() => {
@@ -544,14 +555,14 @@ export default function Home() {
     if (!selectedId) return;
     void fetch(`${API}/api/recordings/${selectedId}`)
       .then((response) => {
-        if (!response.ok) throw new Error("无法读取录音详情");
+        if (!response.ok) throw new Error(t("readDetail"));
         return response.json() as Promise<Detail>;
       })
       .then((data) => {
         setDetail(data);
         setSummaryRunning(data.summary?.status === "queued" || data.summary?.status === "running");
       })
-      .catch((caught: Error) => setError(caught.message));
+      .catch((caught: Error) => setError(localizeServerText(locale, caught.message)));
     void loadRecordingExtras(selectedId)
       .then((extras) => {
         setSpeakers(extras.speakers);
@@ -563,15 +574,15 @@ export default function Home() {
         setFavorites(extras.favorites);
         setActivity(extras.activity);
       })
-      .catch((caught: Error) => setError(caught.message));
-  }, [loadRecordingExtras, selectedId]);
+      .catch((caught: Error) => setError(localizeServerText(locale, caught.message)));
+  }, [loadRecordingExtras, locale, selectedId, t]);
 
   useEffect(() => {
     if (!summaryRunning || !selectedId) return;
     const refreshSummary = () => {
       void fetch(`${API}/api/recordings/${selectedId}`)
         .then((response) => {
-          if (!response.ok) throw new Error("无法读取总结进度");
+          if (!response.ok) throw new Error(t("readSummaryProgress"));
           return response.json() as Promise<Detail>;
         })
         .then((data) => {
@@ -579,9 +590,9 @@ export default function Home() {
           if (data.summary?.status !== "queued" && data.summary?.status !== "running") {
             setSummaryRunning(false);
             if (data.summary?.status === "failed") {
-              setSummaryMessage(data.summary.error || "总结失败，请检查 DeepSeek 配置");
+              setSummaryMessage(localizeServerText(locale, data.summary.error) || t("summaryFailedCheck"));
             } else {
-              setSummaryMessage("总结已完成");
+              setSummaryMessage(t("summaryCompleted"));
             }
           }
         })
@@ -590,7 +601,7 @@ export default function Home() {
     const timer = window.setInterval(refreshSummary, 2_000);
     refreshSummary();
     return () => window.clearInterval(timer);
-  }, [selectedId, summaryRunning]);
+  }, [locale, selectedId, summaryRunning, t]);
 
   function chooseRecording(recordingId: string) {
     setDetail(null);
@@ -634,7 +645,7 @@ export default function Home() {
     if (!title) {
       setCurrentTitleDraft(selected.title);
       setEditingCurrentTitle(false);
-      setCurrentTitleMessage("名称不能为空，已保留原名");
+      setCurrentTitleMessage(t("nameRequired"));
       return;
     }
     if (title === selected.title) {
@@ -650,7 +661,7 @@ export default function Home() {
         body: JSON.stringify({ title }),
       });
       const payload = (await response.json()) as Recording & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法修改录音名称");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("saveRecordingNameError"));
       setRecordings((current) => current.map((item) => item.id === payload.id ? { ...item, ...payload } : item));
       setManagedRecordings((current) => current.map((item) => item.id === payload.id ? { ...item, ...payload } : item));
       setRecordingDrafts((current) => ({ ...current, [payload.id]: payload.title }));
@@ -660,7 +671,7 @@ export default function Home() {
       await refreshActivityLog(payload.id);
     } catch (caught) {
       setCurrentTitleDraft(selected.title);
-      setCurrentTitleMessage(caught instanceof Error ? caught.message : "无法修改录音名称");
+      setCurrentTitleMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("saveRecordingNameError"));
     } finally {
       setSavingRecording("");
     }
@@ -676,15 +687,15 @@ export default function Home() {
       { signal: controller.signal },
     )
       .then((response) => {
-        if (!response.ok) throw new Error("无法读取该时段转写");
+        if (!response.ok) throw new Error(t("readBlocks"));
         return response.json() as Promise<{ blocks: TextBlock[] }>;
       })
       .then((data) => setBlocks(data.blocks))
       .catch((caught: Error) => {
-        if (caught.name !== "AbortError") setError(caught.message);
+        if (caught.name !== "AbortError") setError(localizeServerText(locale, caught.message));
       });
     return () => controller.abort();
-  }, [contentRevision, selectedId, selected?.duration_ms, selected?.has_transcript, windowStart]);
+  }, [contentRevision, locale, selectedId, selected?.duration_ms, selected?.has_transcript, t, windowStart]);
 
   useEffect(() => {
     if (!follow || !activeSentence) return;
@@ -736,7 +747,7 @@ export default function Home() {
   function chooseSummaryPrompt(prompt: SummaryPrompt) {
     setSelectedPromptId(prompt.id);
     setSummaryPromptDraft(prompt.prompt);
-    setPromptLibraryMessage(`已选用“${prompt.name}”，提交时会保存你对内容的修改。`);
+    setPromptLibraryMessage(formatMessage(locale, "promptSelected", { name: localizedPromptName(locale, prompt.id, prompt.name) }));
   }
 
   function startNewSummaryPrompt() {
@@ -750,7 +761,7 @@ export default function Home() {
     const name = promptNameDraft.trim();
     const prompt = promptBodyDraft.trim();
     if (!name || !prompt) {
-      setPromptLibraryMessage("请填写提示词名称和内容后再保存。");
+      setPromptLibraryMessage(t("promptRequired"));
       return;
     }
     setPromptSaving(true);
@@ -762,14 +773,14 @@ export default function Home() {
         body: JSON.stringify({ name, prompt }),
       });
       const payload = (await response.json()) as SummaryPrompt & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法保存提示词");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("savePromptError"));
       setSummaryPrompts((current) => [...current, payload]);
       setSelectedPromptId(payload.id);
       setSummaryPromptDraft(payload.prompt);
       setShowPromptEditor(false);
-      setPromptLibraryMessage(`“${payload.name}”已保存，可继续修改后提交。`);
+      setPromptLibraryMessage(formatMessage(locale, "promptSaved", { name: payload.name }));
     } catch (caught) {
-      setPromptLibraryMessage(caught instanceof Error ? caught.message : "无法保存提示词");
+      setPromptLibraryMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("savePromptError"));
     } finally {
       setPromptSaving(false);
     }
@@ -785,7 +796,7 @@ export default function Home() {
       body: JSON.stringify({ name: current.name, prompt: summaryPromptDraft }),
     });
     const payload = (await response.json()) as SummaryPrompt & { detail?: string };
-    if (!response.ok) throw new Error(payload.detail || "无法保存已修改的提示词");
+    if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("savePromptError"));
     setSummaryPrompts((items) => items.map((item) => item.id === payload.id ? payload : item));
   }
 
@@ -801,21 +812,21 @@ export default function Home() {
         body: JSON.stringify({ prompt: summaryPromptDraft }),
       });
       const payload = (await response.json()) as { detail?: string; status?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法开始总结");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("startSummaryError"));
       setShowSummaryDialog(false);
       setSummaryRunning(true);
-      setSummaryMessage("已提交给 DeepSeek，正在生成总结…");
+      setSummaryMessage(t("summarySubmitted"));
       setDetail((current) => current ? {
         ...current,
         summary: {
           status: "queued",
           prompt: summaryPromptDraft,
           progress_percent: 0,
-          stage: "等待开始",
+          stage: t("summaryWaiting"),
         },
       } : current);
     } catch (caught) {
-      setSummaryMessage(caught instanceof Error ? caught.message : "无法开始总结");
+      setSummaryMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("startSummaryError"));
     } finally {
       setSummarySubmitting(false);
     }
@@ -824,7 +835,7 @@ export default function Home() {
   async function exportMarkdown(kind: "summary" | "transcript") {
     if (!selected?.has_transcript || exportingMarkdown) return;
     if (kind === "summary" && !detail?.topics.length && detail?.summary?.status !== "completed") {
-      setExportMessage("总结完成后才能导出总结 Markdown。");
+      setExportMessage(t("summaryNotReady"));
       return;
     }
     setExportingMarkdown(kind);
@@ -835,20 +846,20 @@ export default function Home() {
       );
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(payload.detail || "无法导出 Markdown");
+        throw new Error(localizeServerText(locale, payload.detail) || t("exportError"));
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = kind === "summary" ? "总结.md" : "完整对话.md";
+      link.download = kind === "summary" ? "summary.md" : "transcript.md";
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      setExportMessage(kind === "summary" ? "总结 Markdown 已导出" : "完整对话 Markdown 已导出");
+      setExportMessage(kind === "summary" ? t("summaryExported") : t("transcriptExported"));
     } catch (caught) {
-      setExportMessage(caught instanceof Error ? caught.message : "无法导出 Markdown");
+      setExportMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("exportError"));
     } finally {
       setExportingMarkdown("");
     }
@@ -858,19 +869,19 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    setUploadMessage(`正在接收 ${file.name}…`);
+    setUploadMessage(formatMessage(locale, "receivingFile", { name: file.name }));
     const form = new FormData();
     form.append("file", file);
     form.append("allow_cloud_upload", String(allowCloud));
     try {
       const response = await fetch(`${API}/api/uploads`, { method: "POST", body: form });
       const payload = (await response.json()) as TranscriptionJob & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "上传失败");
-      setUploadMessage(`已进入转写队列：${payload.id}`);
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("uploadFailed"));
+      setUploadMessage(formatMessage(locale, "queuedFile", { id: payload.id }));
       setJobs((current) => [payload, ...current.filter((job) => job.id !== payload.id)]);
       void loadJobs();
     } catch (caught) {
-      setUploadMessage(caught instanceof Error ? caught.message : "上传失败");
+      setUploadMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("uploadFailed"));
     } finally {
       setUploading(false);
       event.target.value = "";
@@ -879,20 +890,20 @@ export default function Home() {
 
   async function cancelJob(job: TranscriptionJob) {
     setJobAction(job.id);
-    setUploadMessage(`正在取消：${job.filename}。已经产生的云端费用仍可能计费。`);
+    setUploadMessage(formatMessage(locale, "cancellingFile", { name: job.filename }));
     setJobs((current) =>
       current.map((item) =>
         item.id === job.id
-          ? { ...item, cancel_requested: true, stage: "正在取消" }
+          ? { ...item, cancel_requested: true, stage: "Cancelling" }
           : item,
       ),
     );
     try {
       const response = await fetch(`${API}/api/jobs/${job.id}/cancel`, { method: "POST" });
       const payload = (await response.json()) as TranscriptionJob & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法取消转写");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("cancelTranscriptionError"));
       setJobs((current) => current.map((item) => (item.id === job.id ? payload : item)));
-      setUploadMessage(`正在取消：${job.filename}`);
+      setUploadMessage(formatMessage(locale, "cancellingFileShort", { name: job.filename }));
     } catch (caught) {
       setJobs((current) =>
         current.map((item) =>
@@ -901,7 +912,7 @@ export default function Home() {
             : item,
         ),
       );
-      setUploadMessage(caught instanceof Error ? caught.message : "无法取消转写");
+      setUploadMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("cancelTranscriptionError"));
     } finally {
       setJobAction("");
     }
@@ -912,11 +923,11 @@ export default function Home() {
     try {
       const response = await fetch(`${API}/api/jobs/${job.id}`, { method: "DELETE" });
       const payload = (await response.json()) as TranscriptionJob & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法移除任务记录");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("removeTaskError"));
       setJobs((current) => current.filter((item) => item.id !== job.id));
-      setUploadMessage(`已从任务列表移除：${job.filename}（录音与已有结果仍保留）`);
+      setUploadMessage(formatMessage(locale, "taskRemoved", { name: job.filename }));
     } catch (caught) {
-      setUploadMessage(caught instanceof Error ? caught.message : "无法移除任务记录");
+      setUploadMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("removeTaskError"));
     } finally {
       setJobAction("");
     }
@@ -924,7 +935,8 @@ export default function Home() {
 
   async function continueJob(job: TranscriptionJob, decision: RecoveryDecision) {
     setJobAction(job.id);
-    setUploadMessage(`正在执行“${decision.continue_label}”：${job.filename}`);
+    const localizedDecision = localizedRecoveryDecision(locale, decision);
+    setUploadMessage(formatMessage(locale, "executingDecision", { label: localizedDecision.continue_label, name: job.filename }));
     try {
       const response = await fetch(`${API}/api/jobs/${job.id}/continue`, {
         method: "POST",
@@ -932,12 +944,12 @@ export default function Home() {
         body: JSON.stringify({ strategy: decision.strategy }),
       });
       const payload = (await response.json()) as TranscriptionJob & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "当前任务无法安全继续");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("continueTaskError"));
       setJobs((current) => current.map((item) => (item.id === job.id ? payload : item)));
-      setUploadMessage(`已按“${decision.continue_label}”进入队列：${job.filename}`);
+      setUploadMessage(formatMessage(locale, "queuedDecision", { label: localizedDecision.continue_label, name: job.filename }));
       void loadJobs();
     } catch (caught) {
-      setUploadMessage(caught instanceof Error ? caught.message : "无法继续转写");
+      setUploadMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("continueTaskError"));
     } finally {
       setJobAction("");
     }
@@ -948,15 +960,15 @@ export default function Home() {
     try {
       const response = await fetch(`${API}/api/jobs/${job.id}/decision/cancel`, { method: "POST" });
       const payload = (await response.json()) as TranscriptionJob & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法取消任务");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("cancelTaskError"));
       setJobs((current) => current.map((item) => (item.id === job.id ? payload : item)));
       setUploadMessage(
         job.status === "completed"
-          ? `已保留当前转写，暂不修复文本整理：${job.filename}`
-          : `已取消并保留已有结果：${job.filename}`,
+          ? formatMessage(locale, "keepTranscription", { name: job.filename })
+          : formatMessage(locale, "cancelKeepResults", { name: job.filename }),
       );
     } catch (caught) {
-      setUploadMessage(caught instanceof Error ? caught.message : "无法取消任务");
+      setUploadMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("cancelTaskError"));
     } finally {
       setJobAction("");
     }
@@ -984,7 +996,7 @@ export default function Home() {
     if (!selected || !startTimeDraft) return;
     const recordedAt = `${startTimeDraft}${recordingOffset(selected.recorded_at)}`;
     if (Number.isNaN(new Date(recordedAt).getTime())) {
-      setStartTimeMessage("请输入有效的开始日期和时间");
+      setStartTimeMessage(t("invalidStartTime"));
       return;
     }
     setSavingStartTime(true);
@@ -996,11 +1008,11 @@ export default function Home() {
         body: JSON.stringify({ recorded_at: recordedAt }),
       });
       const payload = (await response.json()) as Detail & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法保存开始时间");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("saveStartTimeError"));
       applyStartTimeUpdate(payload);
-      setStartTimeMessage("已保存，全文实际时间已重新换算");
+      setStartTimeMessage(t("startTimeSaved"));
     } catch (caught) {
-      setStartTimeMessage(caught instanceof Error ? caught.message : "无法保存开始时间");
+      setStartTimeMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("saveStartTimeError"));
     } finally {
       setSavingStartTime(false);
     }
@@ -1015,11 +1027,11 @@ export default function Home() {
         method: "DELETE",
       });
       const payload = (await response.json()) as Detail & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法恢复文件时间");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("resetStartTimeError"));
       applyStartTimeUpdate(payload);
-      setStartTimeMessage("已恢复录音文件记录的开始时间");
+      setStartTimeMessage(t("startTimeRestored"));
     } catch (caught) {
-      setStartTimeMessage(caught instanceof Error ? caught.message : "无法恢复文件时间");
+      setStartTimeMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("resetStartTimeError"));
     } finally {
       setSavingStartTime(false);
     }
@@ -1042,7 +1054,7 @@ export default function Home() {
     if (!selected) return;
     const displayName = (speakerDrafts[sourceSpeaker] ?? "").trim();
     if (!displayName) {
-      setSpeakerMessage("说话人名称不能为空");
+      setSpeakerMessage(t("speakerNameRequired"));
       return;
     }
     setSavingSpeaker(sourceSpeaker);
@@ -1054,12 +1066,12 @@ export default function Home() {
         body: JSON.stringify({ source_speaker: sourceSpeaker, display_name: displayName }),
       });
       const payload = (await response.json()) as SpeakerInfo[] & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法保存说话人名称");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("saveSpeakerError"));
       applySpeakerList(payload);
-      setSpeakerMessage(`已在整份录音中更新“${sourceSpeaker}”`);
+      setSpeakerMessage(formatMessage(locale, "speakerUpdated", { speaker: sourceSpeaker }));
       await refreshActivityLog(selected.id);
     } catch (caught) {
-      setSpeakerMessage(caught instanceof Error ? caught.message : "无法保存说话人名称");
+      setSpeakerMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("saveSpeakerError"));
     } finally {
       setSavingSpeaker("");
     }
@@ -1076,12 +1088,12 @@ export default function Home() {
         { method: "DELETE" },
       );
       const payload = (await response.json()) as SpeakerInfo[] & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法恢复说话人名称");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("resetSpeakerError"));
       applySpeakerList(payload);
-      setSpeakerMessage(`已恢复“${sourceSpeaker}”`);
+      setSpeakerMessage(formatMessage(locale, "speakerRestored", { speaker: sourceSpeaker }));
       await refreshActivityLog(selected.id);
     } catch (caught) {
-      setSpeakerMessage(caught instanceof Error ? caught.message : "无法恢复说话人名称");
+      setSpeakerMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("resetSpeakerError"));
     } finally {
       setSavingSpeaker("");
     }
@@ -1106,12 +1118,12 @@ export default function Home() {
         { method: isFavorite ? "DELETE" : "PUT" },
       );
       const payload = (await response.json()) as Favorite[] & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法保存收藏");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("saveFavoriteError"));
       applyFavorites(payload);
       announceFavoriteChange();
       await refreshActivityLog(selected.id);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "无法保存收藏");
+      setError(caught instanceof Error ? localizeServerText(locale, caught.message) : t("saveFavoriteError"));
     }
   }
 
@@ -1122,7 +1134,7 @@ export default function Home() {
   async function saveRecordingTitle(recording: Recording) {
     const title = (recordingDrafts[recording.id] ?? "").trim();
     if (!title) {
-      setRecordingManagerMessage("录音名称不能为空");
+      setRecordingManagerMessage(t("nameRequired"));
       return;
     }
     setSavingRecording(recording.id);
@@ -1134,11 +1146,11 @@ export default function Home() {
         body: JSON.stringify({ title }),
       });
       const payload = (await response.json()) as Recording & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法修改录音名称");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("saveRecordingNameError"));
       await refreshRecordingCatalog();
-      setRecordingManagerMessage(`已将录音显示名改为“${payload.title}”`);
+      setRecordingManagerMessage(formatMessage(locale, "recordingRenamed", { title: payload.title }));
     } catch (caught) {
-      setRecordingManagerMessage(caught instanceof Error ? caught.message : "无法修改录音名称");
+      setRecordingManagerMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("saveRecordingNameError"));
     } finally {
       setSavingRecording("");
     }
@@ -1152,11 +1164,11 @@ export default function Home() {
         method: "DELETE",
       });
       const payload = (await response.json()) as Recording & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法恢复录音原名");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("resetRecordingNameError"));
       await refreshRecordingCatalog();
-      setRecordingManagerMessage(`已恢复原名“${payload.title}”`);
+      setRecordingManagerMessage(formatMessage(locale, "recordingNameRestored", { title: payload.title }));
     } catch (caught) {
-      setRecordingManagerMessage(caught instanceof Error ? caught.message : "无法恢复录音原名");
+      setRecordingManagerMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("resetRecordingNameError"));
     } finally {
       setSavingRecording("");
     }
@@ -1173,33 +1185,34 @@ export default function Home() {
         { method: hidden ? "DELETE" : "POST" },
       );
       const payload = (await response.json()) as Recording & { detail?: string };
-      if (!response.ok) throw new Error(payload.detail || "无法更新录音目录");
+      if (!response.ok) throw new Error(localizeServerText(locale, payload.detail) || t("updateRecordingCatalogError"));
       await refreshRecordingCatalog();
       setRecordingManagerMessage(
-        hidden ? `已从工作台移除“${payload.title}”，原文件仍保留` : `已恢复“${payload.title}”`,
+        hidden ? formatMessage(locale, "recordingHidden", { title: payload.title }) : formatMessage(locale, "recordingRestored", { title: payload.title }),
       );
     } catch (caught) {
-      setRecordingManagerMessage(caught instanceof Error ? caught.message : "无法更新录音目录");
+      setRecordingManagerMessage(caught instanceof Error ? localizeServerText(locale, caught.message) : t("updateRecordingCatalogError"));
     } finally {
       setSavingRecording("");
     }
   }
 
-  if (loading) return <main className="loading-screen">正在整理录音时间线…</main>;
+  if (loading) return <main className="loading-screen">{t("loadingTimeline")}</main>;
 
   return (
     <main className="workspace">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">声</span>
-          <div><h1>语迹 VoiceTrace</h1><p>录音审阅工作台 · 沿着声音，读懂一天</p></div>
+          <span className="brand-mark">V</span>
+          <div><h1>VoiceTrace</h1><p>{t("brandTagline")}</p></div>
         </div>
         <div className="top-actions">
           <button className="recording-picker" onClick={openRecordingPicker} aria-haspopup="dialog">
-            <span>当前录音</span>
-            <strong>{selected?.title || "选择录音"}</strong>
+            <span>{t("currentRecording")}</span>
+            <strong>{selected?.title || t("selectRecording")}</strong>
             <i aria-hidden="true">⌄</i>
           </button>
+          <LanguageSwitcher locale={locale} onChange={setLocale} />
           <button
             className="quiet-button"
             onClick={() => {
@@ -1208,9 +1221,9 @@ export default function Home() {
               setRecordingManagerMessage("");
               void loadManagedRecordings().catch((caught: Error) => setError(caught.message));
             }}
-          >管理录音</button>
-          <Link className="quiet-button" href="/favorites" target="_blank" rel="noreferrer">收藏汇总</Link>
-          <button className="quiet-button" onClick={() => setShowUpload((value) => !value)}>＋ 添加录音</button>
+          >{t("manageRecordings")}</button>
+          <Link className="quiet-button" href="/favorites" target="_blank" rel="noreferrer">{t("favoritesSummary")}</Link>
+          <button className="quiet-button" onClick={() => setShowUpload((value) => !value)}>{t("addRecording")}</button>
         </div>
       </header>
 
@@ -1218,13 +1231,13 @@ export default function Home() {
         <section className="upload-panel">
           {showUpload && (
             <div className="upload-strip">
-              <div><strong>添加新的长录音</strong><span>M4A、MP3、WAV 或 FLAC，最大 2 GB</span></div>
+              <div><strong>{t("addLongRecording")}</strong><span>{t("supportedAudio")}</span></div>
               <label className="cloud-choice">
                 <input type="checkbox" checked={allowCloud} onChange={(event) => setAllowCloud(event.target.checked)} />
-                低成本云端增强（默认开启；仅上传语音区间，费用上限 ¥3；关闭需本地 Qwen3-ASR）
+                {t("cloudChoice")}
               </label>
               <label className={`upload-button ${uploading ? "disabled" : ""}`}>
-                {uploading ? "正在上传…" : "选择录音并开始转写"}
+                {uploading ? t("uploading") : t("chooseAndStart")}
                 <input type="file" accept="audio/*,.m4a,.mp3,.wav,.flac" disabled={uploading} onChange={upload} />
               </label>
               {uploadMessage && <p className="upload-message">{uploadMessage}</p>}
@@ -1234,11 +1247,11 @@ export default function Home() {
             <div className="job-board">
               <div className="job-board-heading">
                 <div className="job-board-heading-copy">
-                  <strong>转写任务</strong>
+                  <strong>{t("transcriptionJobs")}</strong>
                   <span>
-                    {jobs.length} 条记录
-                    {activeJobs.length > 0 && ` · ${activeJobs.length} 条处理中`}
-                    {!jobsCollapsed && " · 进度、Token 与费用每 2 秒自动刷新"}
+                    {formatMessage(locale, "records", { count: jobs.length })}
+                    {activeJobs.length > 0 && ` · ${formatMessage(locale, "activeProcessing", { count: activeJobs.length })}`}
+                    {!jobsCollapsed && ` · ${t("refreshDetails")}`}
                   </span>
                 </div>
                 <button
@@ -1248,14 +1261,19 @@ export default function Home() {
                   aria-controls="transcription-job-list"
                   onClick={() => setJobsCollapsed((collapsed) => !collapsed)}
                 >
-                  {jobsCollapsed ? "展开转写任务" : "收起转写任务"}
+                  {jobsCollapsed ? t("expandJobs") : t("collapseJobs")}
                 </button>
               </div>
               {!jobsCollapsed && <div className="job-list" id="transcription-job-list">
-                {visibleJobs.map((job) => (
+                {visibleJobs.map((job) => {
+                  const recoveryOptions = jobRecoveryOptions(job).map((option) => localizedRecoveryDecision(locale, option));
+                  const recoveryDecision = job.recovery_decision
+                    ? localizedRecoveryDecision(locale, job.recovery_decision)
+                    : null;
+                  return (
                   <article className={`job-card ${job.status} text-${job.text_review_status ?? "unknown"}`} key={job.id}>
                     <div className="job-heading">
-                      <div><strong>{job.filename}</strong><span>{job.stage}</span></div>
+                      <div><strong>{job.filename}</strong><span>{localizedStage(locale, job.stage)}</span></div>
                       <div className="job-heading-side">
                         <b>{job.progress_percent}%</b>
                         <div className="job-actions">
@@ -1265,9 +1283,9 @@ export default function Home() {
                               className="job-cancel"
                               disabled={jobAction === job.id || job.cancel_requested}
                               onClick={() => void cancelJob(job)}
-                              title="取消本地处理；已经产生的云端费用仍可能计费"
+                              title={t("cancelLocalTitle")}
                             >
-                              {jobAction === job.id || job.cancel_requested ? "正在取消…" : "取消转写"}
+                              {jobAction === job.id || job.cancel_requested ? t("cancelling") : t("cancelTranscription")}
                             </button>
                           ) : (
                             <button
@@ -1275,9 +1293,9 @@ export default function Home() {
                               className="job-dismiss"
                               disabled={jobAction === job.id}
                               onClick={() => void dismissJob(job)}
-                              title="只隐藏任务记录，不删除录音和已有结果"
+                              title={t("hideTaskTitle")}
                             >
-                              {jobAction === job.id ? "正在移除…" : "移除记录"}
+                              {jobAction === job.id ? t("removing") : t("removeRecord")}
                             </button>
                           )}
                         </div>
@@ -1286,7 +1304,7 @@ export default function Home() {
                     <div
                       className="job-progress"
                       role="progressbar"
-                      aria-label={`${job.filename} 处理进度`}
+                      aria-label={`${job.filename} ${t("processingProgress")}`}
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-valuenow={job.progress_percent}
@@ -1295,39 +1313,39 @@ export default function Home() {
                     </div>
                     <div className="job-cost-grid">
                       <div>
-                        <span>处理进度</span>
-                        <strong>{job.stage}</strong>
+                        <span>{t("processingProgress")}</span>
+                        <strong>{localizedStage(locale, job.stage)}</strong>
                         <small>
                           {job.retry_count
-                            ? `已自动断点重试 ${job.retry_count} 次 · ${job.completed_steps.length} 个阶段已复用`
+                            ? formatMessage(locale, "checkpointRetried", { count: job.retry_count, stages: job.completed_steps.length })
                             : job.recovery_count
-                              ? `服务重启后已恢复 ${job.recovery_count} 次 · ${job.completed_steps.length} 个阶段已复用`
-                              : jobCompletionSummary(job)}
+                              ? formatMessage(locale, "restartRecovered", { count: job.recovery_count, stages: job.completed_steps.length })
+                              : jobCompletionSummary(job, locale)}
                         </small>
                       </div>
-                      <div><span>DeepSeek Token</span><strong>{job.text_review_total_tokens ? job.text_review_total_tokens.toLocaleString() : "尚未产生"}</strong><small>输入 {job.text_review_input_tokens.toLocaleString()} / 输出 {job.text_review_output_tokens.toLocaleString()}</small></div>
-                      <div><span>Token 费用</span><strong>¥{job.text_review_cost_cny.toFixed(4)}</strong><small>文本整理上限 ¥{job.text_review_cost_cap_cny.toFixed(2)}</small></div>
-                      <div><span>ASR 计费</span><strong>¥{job.asr_cost_cny.toFixed(4)}</strong><small>{job.cloud_billed_seconds.toLocaleString()} 秒 · 按音频时长计费</small></div>
-                      <div className="job-total-cost"><span>总费用（估算）</span><strong>¥{job.estimated_cost_cny.toFixed(4)}</strong><small>硬上限 ¥{job.cost_cap_cny.toFixed(2)}</small></div>
+                      <div><span>DeepSeek Token</span><strong>{job.text_review_total_tokens ? job.text_review_total_tokens.toLocaleString(locale) : t("tokensNotGenerated")}</strong><small>{formatMessage(locale, "tokenBreakdown", { input: job.text_review_input_tokens.toLocaleString(locale), output: job.text_review_output_tokens.toLocaleString(locale) })}</small></div>
+                      <div><span>{t("tokenCost")}</span><strong>¥{job.text_review_cost_cny.toFixed(4)}</strong><small>{formatMessage(locale, "textReviewCap", { cap: job.text_review_cost_cap_cny.toFixed(2) })}</small></div>
+                      <div><span>{t("asrBilling")}</span><strong>¥{job.asr_cost_cny.toFixed(4)}</strong><small>{formatMessage(locale, "billedSeconds", { seconds: job.cloud_billed_seconds.toLocaleString(locale) })}</small></div>
+                      <div className="job-total-cost"><span>{t("estimatedTotal")}</span><strong>¥{job.estimated_cost_cny.toFixed(4)}</strong><small>{formatMessage(locale, "hardCap", { cap: job.cost_cap_cny.toFixed(2) })}</small></div>
                     </div>
-                    {job.recovery_decision && (
-                      <section className="job-decision" aria-label={`${job.filename} 处理决策`}>
+                    {recoveryDecision && (
+                      <section className="job-decision" aria-label={`${job.filename} ${t("decisionRequired")}`}>
                         <div className="job-decision-copy">
-                          <span>需要你的决定 · 系统建议</span>
-                          <strong>{job.recovery_decision.title}</strong>
-                          <p>{job.recovery_decision.description}</p>
-                          <small>{job.recovery_decision.impact}</small>
-                          {job.recovery_decision.strategy === "extend_text_review_budget" && (
-                            <small>选择“追加预算完成剩余窗口”仍只处理文字；也可以保留当前可用结果。</small>
+                          <span>{t("decisionRequired")}</span>
+                          <strong>{recoveryDecision.title}</strong>
+                          <p>{recoveryDecision.description}</p>
+                          <small>{recoveryDecision.impact}</small>
+                          {recoveryDecision.strategy === "extend_text_review_budget" && (
+                            <small>{t("extendTextReviewNote")}</small>
                           )}
-                          {jobRecoveryOptions(job).slice(1).map((option) => (
+                          {recoveryOptions.slice(1).map((option) => (
                             <small className="job-alternative" key={option.strategy}>
-                              另一种选择：{option.title}。{option.impact}
+                              {formatMessage(locale, "alternative", { title: option.title, impact: option.impact })}
                             </small>
                           ))}
                         </div>
                         <div className="job-decision-actions">
-                          {jobRecoveryOptions(job).map((option, optionIndex) => (
+                          {recoveryOptions.map((option, optionIndex) => (
                             <button
                               type="button"
                               className={
@@ -1343,9 +1361,9 @@ export default function Home() {
                               key={option.strategy}
                             >
                               {jobAction === job.id && optionIndex === 0
-                                ? "正在处理…"
+                                ? t("processing")
                                 : option.continue_label ||
-                                  (job.status === "completed" ? "仅修复文本整理" : "按建议继续")}
+                                  (job.status === "completed" ? t("repairTextOnly") : t("continueAsRecommended"))}
                             </button>
                           ))}
                           <button
@@ -1354,31 +1372,32 @@ export default function Home() {
                             disabled={jobAction === job.id}
                             onClick={() => void cancelFailedJob(job)}
                           >
-                            {job.status === "completed" ? "暂不修复，保留当前结果" : "取消并保留已有结果"}
+                            {job.status === "completed" ? t("keepCurrentResult") : t("cancelKeepExisting")}
                           </button>
                         </div>
                       </section>
                     )}
                     {job.retrying && job.last_error && (
-                      <p className="job-warning">上次失败：{job.last_error}；正在从已有断点自动续跑。</p>
+                      <p className="job-warning">{formatMessage(locale, "previousFailure", { error: localizeServerText(locale, job.last_error) })}</p>
                     )}
-                    {job.status === "failed" && job.error && <p className="job-error">{job.error}</p>}
+                    {job.status === "failed" && job.error && <p className="job-error">{localizeServerText(locale, job.error)}</p>}
                     {job.warning && (
                       <p className={job.text_review_status === "partial" ? "job-notice" : "job-warning"}>
-                        {job.text_review_status === "fallback" && "完整 ASR 转写已生成；仅文本整理未完成。"}
-                        {job.warning}
-                        {job.text_review_status === "partial" && "；现有正文和话题可以直接使用。"}
+                        {job.text_review_status === "fallback" && t("fullTranscriptReady")}
+                        {localizeServerText(locale, job.warning)}
+                        {job.text_review_status === "partial" && `; ${t("usableTranscript")}`}
                       </p>
                     )}
                   </article>
-                ))}
+                  );
+                })}
               </div>}
             </div>
           )}
         </section>
       )}
 
-      {error && <div className="error-banner">{error}。请确认本地服务正在运行。</div>}
+      {error && <div className="error-banner">{error}. {t("noLocalService")}</div>}
 
       {showRecordingPicker && (
         <div className="speaker-editor-backdrop" onMouseDown={() => setShowRecordingPicker(false)}>
@@ -1386,32 +1405,32 @@ export default function Home() {
             className="recording-browser"
             role="dialog"
             aria-modal="true"
-            aria-label="选择录音"
+            aria-label={t("chooseRecordingTitle")}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="speaker-editor-heading recording-browser-heading">
               <div>
-                <span className="eyebrow">RECORDING LIBRARY</span>
-                <h2>选择录音</h2>
-                <p>按月份浏览；每个月内按当前录音名称排序。</p>
+                <span className="eyebrow">{t("recordingLibrary")}</span>
+                <h2>{t("chooseRecordingTitle")}</h2>
+                <p>{t("browseMonths")}</p>
               </div>
-              <button aria-label="关闭录音选择" onClick={() => setShowRecordingPicker(false)}>×</button>
+              <button aria-label={t("closeRecordingPicker")} onClick={() => setShowRecordingPicker(false)}>×</button>
             </div>
             <div className="recording-browser-search">
               <label>
-                <span>查找录音</span>
+                <span>{t("findRecording")}</span>
                 <input
                   type="search"
                   value={recordingPickerQuery}
-                  placeholder="输入当前名称或原始文件名"
+                  placeholder={t("nameOrOriginal")}
                   autoFocus
                   onChange={(event) => setRecordingPickerQuery(event.target.value)}
                 />
               </label>
-              <span>{recordings.length} 份录音</span>
+              <span>{formatMessage(locale, "recordingsCount", { count: recordings.length })}</span>
             </div>
             <div className="recording-browser-body">
-              <nav className="recording-month-tabs" aria-label="按月份浏览录音">
+              <nav className="recording-month-tabs" aria-label={t("browseMonthsAria")}>
                 {recordingGroups.map((group) => (
                   <button
                     key={group.key}
@@ -1425,30 +1444,30 @@ export default function Home() {
               </nav>
               <div className="recording-choice-list">
                 {!activeRecordingGroup ? (
-                  <div className="saved-empty">没有找到匹配的录音。</div>
+                  <div className="saved-empty">{t("noRecordingMatches")}</div>
                 ) : (
                   <>
                     <div className="recording-choice-heading">
                       <strong>{activeRecordingGroup.label}</strong>
-                      <span>按名称 A → Z</span>
+                      <span>{t("sortedAZ")}</span>
                     </div>
                     {activeRecordingGroup.recordings.map((recording) => (
                       <button
                         key={recording.id}
                         className={`recording-choice ${recording.id === selectedId ? "active" : ""}`}
                         onClick={() => chooseRecording(recording.id)}
-                        title={recordingOptionLabel(recording)}
+                        title={recordingOptionLabel(recording, locale)}
                       >
                         <span className="recording-choice-mark" aria-hidden="true" />
                         <span className="recording-choice-copy">
                           <strong>{recording.title}</strong>
                           {recording.title_overridden && recording.original_title && (
-                            <small>原文件：{recording.original_title}</small>
+                            <small>{formatMessage(locale, "originalFile", { name: recording.original_title })}</small>
                           )}
                         </span>
                         <span className="recording-choice-meta">
-                          <time>{new Date(recording.recorded_at).toLocaleDateString("zh-CN")}</time>
-                          <small>{clock(recording.duration_ms)} · {recording.segment_count.toLocaleString()} 条语音</small>
+                          <time>{new Date(recording.recorded_at).toLocaleDateString(locale)}</time>
+                          <small>{formatMessage(locale, "recordingMeta", { duration: clock(recording.duration_ms), count: recording.segment_count.toLocaleString(locale) })}</small>
                         </span>
                       </button>
                     ))}
@@ -1457,8 +1476,8 @@ export default function Home() {
               </div>
             </div>
             <div className="recording-browser-footer">
-              <span>切换录音不会改变名称、时间校准、收藏或转写内容。</span>
-              <button onClick={() => setShowRecordingPicker(false)}>关闭</button>
+              <span>{t("switchingRecordingNote")}</span>
+              <button onClick={() => setShowRecordingPicker(false)}>{t("close")}</button>
             </div>
           </section>
         </div>
@@ -1470,19 +1489,19 @@ export default function Home() {
             className="recording-manager"
             role="dialog"
             aria-modal="true"
-            aria-label="管理录音名称"
+            aria-label={t("manageRecordingTitle")}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="speaker-editor-heading">
               <div>
-                <span className="eyebrow">RECORDING CATALOG</span>
-                <h2>管理录音</h2>
-                <p>搜索、重命名、移除或恢复工作台中的录音。</p>
+                <span className="eyebrow">{t("recordingCatalog")}</span>
+                <h2>{t("manageRecordingTitle")}</h2>
+                <p>{t("manageRecordingDescription")}</p>
               </div>
-              <button aria-label="关闭录音管理" onClick={() => setShowRecordingManager(false)}>×</button>
+              <button aria-label={t("closeRecordingManager")} onClick={() => setShowRecordingManager(false)}>×</button>
             </div>
             <div className="recording-manager-note">
-              “删除”只从工作台移除，不删除原始音频和转写；隐藏的录音可随时恢复。
+              {t("removeDoesNotDelete")}
             </div>
             <form
               className="recording-search"
@@ -1494,15 +1513,15 @@ export default function Home() {
               }}
             >
               <label>
-                <span>搜索录音名称</span>
+                <span>{t("searchRecordingName")}</span>
                 <input
                   type="search"
                   value={recordingQuery}
-                  placeholder="输入名称或原始文件名"
+                  placeholder={t("nameOrOriginalShort")}
                   onChange={(event) => setRecordingQuery(event.target.value)}
                 />
               </label>
-              <button type="submit">查询</button>
+              <button type="submit">{t("query")}</button>
               {recordingQuery && (
                 <button
                   type="button"
@@ -1513,24 +1532,24 @@ export default function Home() {
                       setRecordingManagerMessage(caught.message),
                     );
                   }}
-                >清除</button>
+                >{t("clear")}</button>
               )}
             </form>
             <div className="recording-manager-list">
               {loadingRecordingCatalog ? (
-                <div className="saved-empty">正在读取录音目录…</div>
+                <div className="saved-empty">{t("readingCatalog")}</div>
               ) : !managedRecordings.length ? (
-                <div className="saved-empty">没有找到匹配的录音。</div>
+                <div className="saved-empty">{t("noRecordingMatches")}</div>
               ) : managedRecordings.map((recording) => (
                 <div className={`recording-manage-row ${recording.hidden ? "hidden" : ""}`} key={recording.id}>
                   <div className="recording-manage-meta">
                     <span className={recording.hidden ? "recording-state hidden" : "recording-state"}>
-                      {recording.hidden ? "已移除" : "使用中"}
+                      {recording.hidden ? t("hidden") : t("active")}
                     </span>
-                    <small>{clock(recording.duration_ms)} · {recording.segment_count.toLocaleString()} 条语音</small>
+                    <small>{formatMessage(locale, "recordingMeta", { duration: clock(recording.duration_ms), count: recording.segment_count.toLocaleString(locale) })}</small>
                   </div>
                   <label>
-                    <span>工作台显示名</span>
+                    <span>{t("workspaceDisplayName")}</span>
                     <input
                       value={recordingDrafts[recording.id] ?? recording.title}
                       maxLength={160}
@@ -1539,32 +1558,32 @@ export default function Home() {
                         setRecordingManagerMessage("");
                       }}
                     />
-                    {recording.title_overridden && <small>原名：{recording.original_title}</small>}
+                    {recording.title_overridden && <small>{formatMessage(locale, "originalName", { name: recording.original_title ?? "" })}</small>}
                   </label>
                   <div className="recording-manage-actions">
                     <button
                       className="recording-save"
                       disabled={savingRecording === recording.id}
                       onClick={() => void saveRecordingTitle(recording)}
-                    >保存名称</button>
+                    >{savingRecording === recording.id ? t("saving") : t("saveName")}</button>
                     {recording.title_overridden && (
                       <button
                         className="recording-secondary"
                         disabled={savingRecording === recording.id}
                         onClick={() => void resetRecordingTitle(recording)}
-                      >恢复原名</button>
+                      >{t("restoreOriginal")}</button>
                     )}
                     <button
                       className={recording.hidden ? "recording-restore" : "recording-remove"}
                       disabled={savingRecording === recording.id}
                       onClick={() => void setRecordingHidden(recording, !recording.hidden)}
-                    >{recording.hidden ? "恢复到工作台" : "从工作台移除"}</button>
+                    >{recording.hidden ? t("restoreWorkspace") : t("removeFromWorkspace")}</button>
                   </div>
                 </div>
               ))}
             </div>
             <div className="speaker-editor-footer">
-              <span>{recordingManagerMessage || `共显示 ${managedRecordings.length} 份录音`}</span>
+              <span>{recordingManagerMessage || formatMessage(locale, "displayedRecordings", { count: managedRecordings.length })}</span>
               <div className="recording-footer-actions">
                 <button
                   className="recording-add"
@@ -1572,8 +1591,8 @@ export default function Home() {
                     setShowRecordingManager(false);
                     setShowUpload(true);
                   }}
-                >＋ 添加新录音</button>
-                <button onClick={() => setShowRecordingManager(false)}>完成</button>
+                >{t("addNewRecording")}</button>
+                <button onClick={() => setShowRecordingManager(false)}>{t("done")}</button>
               </div>
             </div>
           </section>
@@ -1586,29 +1605,29 @@ export default function Home() {
             className="speaker-editor"
             role="dialog"
             aria-modal="true"
-            aria-label="管理整份录音的说话人"
+            aria-label={t("manageSpeakers")}
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="speaker-editor-heading">
               <div>
-                <span className="eyebrow">RECORDING-WIDE SPEAKERS</span>
-                <h2>管理说话人</h2>
+                <span className="eyebrow">{t("recordingWideSpeakers")}</span>
+                <h2>{t("manageSpeakers")}</h2>
                 <p>{selected.title}</p>
               </div>
-              <button aria-label="关闭说话人管理" onClick={() => setShowSpeakerEditor(false)}>×</button>
+              <button aria-label={t("closeSpeakerManager")} onClick={() => setShowSpeakerEditor(false)}>×</button>
             </div>
             <div className="speaker-editor-note">
-              在这里保存后，会在这份完整录音内统一替换同一原始说话人标签；原始转写不会改变。
+              {t("speakerInstruction")}
             </div>
             <div className="speaker-editor-list">
               {speakers.map((speaker) => (
                 <div className="speaker-editor-row" key={speaker.source_speaker}>
                   <div className="speaker-source">
                     <strong>{speaker.source_speaker}</strong>
-                    <span>{speaker.segment_count.toLocaleString()} 条语音</span>
+                    <span>{formatMessage(locale, "speechSegments", { count: speaker.segment_count.toLocaleString(locale) })}</span>
                   </div>
                   <label>
-                    <span>全局显示为</span>
+                    <span>{t("displayAs")}</span>
                     <input
                       value={speakerDrafts[speaker.source_speaker] ?? speaker.display_name}
                       maxLength={80}
@@ -1627,22 +1646,22 @@ export default function Home() {
                       disabled={savingSpeaker === speaker.source_speaker}
                       onClick={() => void saveSpeaker(speaker.source_speaker)}
                     >
-                      {savingSpeaker === speaker.source_speaker ? "保存中…" : "保存"}
+                      {savingSpeaker === speaker.source_speaker ? t("saving") : t("saveName")}
                     </button>
                     {speaker.is_overridden && (
                       <button
                         className="speaker-reset"
                         disabled={savingSpeaker === speaker.source_speaker}
                         onClick={() => void resetSpeaker(speaker.source_speaker)}
-                      >恢复</button>
+                      >{t("restore")}</button>
                     )}
                   </div>
                 </div>
               ))}
             </div>
             <div className="speaker-editor-footer">
-              <span>{speakerMessage || "每次调整都会写入永久操作日志。"}</span>
-              <button onClick={() => setShowSpeakerEditor(false)}>完成</button>
+              <span>{speakerMessage || t("speakerLogNote")}</span>
+              <button onClick={() => setShowSpeakerEditor(false)}>{t("done")}</button>
             </div>
           </section>
         </div>
@@ -1660,46 +1679,46 @@ export default function Home() {
             <div className="summary-dialog-heading">
               <div>
                 <span className="eyebrow">DEEPSEEK SUMMARY</span>
-                <h2 id="summary-dialog-title">告诉 DS 这次怎么总结</h2>
+                <h2 id="summary-dialog-title">{t("summaryHow")}</h2>
               </div>
-              <button className="modal-close" onClick={() => setShowSummaryDialog(false)} aria-label="关闭总结窗口">×</button>
+              <button className="modal-close" onClick={() => setShowSummaryDialog(false)} aria-label={t("closeSummary")}>×</button>
             </div>
             <p className="summary-dialog-help">
-              提示词只影响右侧总结，不会改写原始录音和左侧完整转写。可要求保留全部内容，也可指定只保留某类主题。
+              {t("summaryHelp")}
             </p>
             {showPromptEditor ? (
               <div className="summary-prompt-editor">
                 <label>
-                  <span>提示词名称</span>
+                  <span>{t("promptName")}</span>
                   <input
                     value={promptNameDraft}
                     maxLength={80}
                     autoFocus
                     onChange={(event) => setPromptNameDraft(event.target.value)}
-                    placeholder="例如：项目复盘"
+                    placeholder={t("newPromptExample")}
                   />
                 </label>
                 <label>
-                  <span>提示词内容</span>
+                  <span>{t("promptContent")}</span>
                   <textarea
                     className="summary-prompt-input"
                     value={promptBodyDraft}
                     maxLength={4_000}
                     onChange={(event) => setPromptBodyDraft(event.target.value)}
-                    placeholder="写清楚要保留、排除和输出的内容。"
-                    aria-label="新提示词内容"
+                    placeholder={t("promptContentPlaceholder")}
+                    aria-label={t("promptContent")}
                   />
                 </label>
                 <div className="summary-prompt-editor-actions">
-                  <button type="button" className="summary-cancel" onClick={() => setShowPromptEditor(false)}>取消</button>
+                  <button type="button" className="summary-cancel" onClick={() => setShowPromptEditor(false)}>{t("summaryCancel")}</button>
                   <button type="button" className="summary-submit" disabled={promptSaving} onClick={() => void saveNewSummaryPrompt()}>
-                    {promptSaving ? "保存中…" : "保存提示词"}
+                    {promptSaving ? t("saving") : t("savePrompt")}
                   </button>
                 </div>
               </div>
             ) : (
               <>
-                <div className="summary-prompt-examples" aria-label="已保存的总结提示词">
+                <div className="summary-prompt-examples" aria-label={t("savedSummaryPrompts")}>
                   {summaryPrompts.map((prompt) => (
                     <button
                       key={prompt.id}
@@ -1707,10 +1726,10 @@ export default function Home() {
                       className={selectedPromptId === prompt.id ? "active" : ""}
                       onClick={() => chooseSummaryPrompt(prompt)}
                     >
-                      {prompt.name}
+                      {localizedPromptName(locale, prompt.id, prompt.name)}
                     </button>
                   ))}
-                  <button type="button" className="summary-prompt-add" onClick={startNewSummaryPrompt}>＋ 添加</button>
+                  <button type="button" className="summary-prompt-add" onClick={startNewSummaryPrompt}>{t("addPrompt")}</button>
                 </div>
                 <textarea
                   className="summary-prompt-input"
@@ -1718,16 +1737,16 @@ export default function Home() {
                   maxLength={4_000}
                   autoFocus
                   onChange={(event) => setSummaryPromptDraft(event.target.value)}
-                  placeholder="例如：只整理财经观点，去掉感谢礼物、唱歌和闲聊；保留涉及的股票、数据、风险和结论。"
-                  aria-label="总结提示词"
+                  placeholder={t("summaryPromptPlaceholder")}
+                  aria-label={t("summaryPromptAria")}
                 />
                 {promptLibraryMessage && <small className="summary-prompt-message">{promptLibraryMessage}</small>}
                 <div className="summary-dialog-footer">
-                  <span>{summaryPromptDraft.length}/4000 · 已选提示词的修改会在提交时保存</span>
+                  <span>{formatMessage(locale, "promptCount", { count: summaryPromptDraft.length })}</span>
                   <div>
-                    <button type="button" className="summary-cancel" onClick={() => setShowSummaryDialog(false)}>取消</button>
+                    <button type="button" className="summary-cancel" onClick={() => setShowSummaryDialog(false)}>{t("summaryCancel")}</button>
                     <button type="button" className="summary-submit" disabled={summarySubmitting} onClick={() => void submitSummary()}>
-                      {summarySubmitting ? "提交中…" : "开始总结"}
+                      {summarySubmitting ? t("submitting") : t("startSummary")}
                     </button>
                   </div>
                 </div>
@@ -1753,14 +1772,14 @@ export default function Home() {
               <div className="player-heading-main">
                 <span className="recording-status">
                   <span className={`status-dot ${selected?.status === "completed" || selected?.status === "available_with_warning" ? "ready" : "working"}`} />
-                  <span>{selected ? statusText(selected) : "未选择录音"}</span>
+                  <span>{selected ? statusText(selected, locale) : t("statusNone")}</span>
                 </span>
                 {selected && (editingCurrentTitle ? (
                   <input
                     className="current-recording-title-input"
                     value={currentTitleDraft}
                     maxLength={160}
-                    aria-label="修改当前录音名称"
+                    aria-label={t("editCurrentTitle")}
                     autoFocus
                     onFocus={(event) => event.currentTarget.select()}
                     onChange={(event) => setCurrentTitleDraft(event.target.value)}
@@ -1787,34 +1806,34 @@ export default function Home() {
                       setCurrentTitleDraft(selected.title);
                       setEditingCurrentTitle(true);
                     }}
-                    title="单击修改录音名称"
+                    title={t("editCurrentTitle")}
                   >
                     {selected.title}
-                    {savingRecording === selected.id && <small>保存中…</small>}
+                    {savingRecording === selected.id && <small>{t("saving")}</small>}
                   </button>
                 ))}
                 {currentTitleMessage && <span className="current-recording-title-message">{currentTitleMessage}</span>}
               </div>
               <div className="date-tools">
-                <span className="date-label">{selected?.recorded_at ? new Date(selected.recorded_at).toLocaleDateString("zh-CN") : ""}</span>
+                <span className="date-label">{selected?.recorded_at ? new Date(selected.recorded_at).toLocaleDateString(locale) : ""}</span>
                 <button
                   className="speaker-editor-trigger"
                   onClick={() => {
                     setShowSpeakerEditor(true);
                     setSpeakerMessage("");
                   }}
-                >管理说话人</button>
+                >{t("manageSpeakers")}</button>
                 <button
                   className="start-time-trigger"
                   onClick={toggleStartTimeEditor}
                   aria-expanded={showStartTimeEditor}
                 >
-                  {selected?.start_time_overridden ? "已校准开始时间" : "校准开始时间"}
+                  {selected?.start_time_overridden ? t("calibratedStart") : t("calibrateStart")}
                 </button>
                 {showStartTimeEditor && selected && (
                   <div className="start-time-editor">
                     <label>
-                      <span>录音当天的实际开始时间</span>
+                      <span>{t("actualStartTime")}</span>
                       <input
                         type="datetime-local"
                         step="1"
@@ -1827,38 +1846,38 @@ export default function Home() {
                     </label>
                     <div className="start-time-actions">
                       <button onClick={() => void saveStartTime()} disabled={savingStartTime || !startTimeDraft}>
-                        {savingStartTime ? "保存中…" : "保存校准"}
+                        {savingStartTime ? t("saving") : t("saveCalibration")}
                       </button>
                       {selected.start_time_overridden && (
                         <button className="reset-time-button" onClick={() => void resetStartTime()} disabled={savingStartTime}>
-                          恢复文件时间
+                          {t("restoreFileTime")}
                         </button>
                       )}
-                      <button className="cancel-time-button" onClick={() => setShowStartTimeEditor(false)}>关闭</button>
+                      <button className="cancel-time-button" onClick={() => setShowStartTimeEditor(false)}>{t("close")}</button>
                     </div>
                     {startTimeMessage && <p>{startTimeMessage}</p>}
-                    <small>只校准实际钟表时间，不改变录音内容和录音内进度。</small>
+                    <small>{t("calibrationNote")}</small>
                   </div>
                 )}
               </div>
             </div>
             <div className="transport">
-              <button aria-label="后退十秒" onClick={() => seek(currentMs - 10_000)}>−10</button>
+              <button aria-label={t("backwardTen")} onClick={() => seek(currentMs - 10_000)}>−10</button>
               <button
                 className="play-button"
-                aria-label={playing ? "暂停" : "播放"}
+                aria-label={playing ? t("pause") : t("play")}
                 onClick={() => {
                   const audio = audioRef.current;
                   if (audio) void (audio.paused ? audio.play() : audio.pause());
                 }}
               >{playing ? "Ⅱ" : "▶"}</button>
-              <button aria-label="前进十秒" onClick={() => seek(currentMs + 10_000)}>+10</button>
+              <button aria-label={t("forwardTen")} onClick={() => seek(currentMs + 10_000)}>+10</button>
               <div className="time-readout">
-                <strong>{actualClock(selected?.recorded_at ?? "", currentMs)}</strong>
+                <strong>{actualClock(selected?.recorded_at ?? "", currentMs, locale)}</strong>
                 <span>{clock(currentMs)} / {clock(selected?.duration_ms ?? 0)}</span>
               </div>
               <label className="rate-control">
-                <span>速度</span>
+                <span>{t("speed")}</span>
                 <select value={rate} onChange={(event) => {
                   const value = Number(event.target.value);
                   setRate(value);
@@ -1868,8 +1887,8 @@ export default function Home() {
                 </select>
               </label>
             </div>
-            <div className="timeline-labels"><span>全天概览</span><span>点击任意位置快速定位</span></div>
-            <div className="timeline" onClick={timelineSeek} role="slider" aria-label="录音进度" aria-valuenow={currentMs} aria-valuemin={0} aria-valuemax={selected?.duration_ms ?? 0}>
+            <div className="timeline-labels"><span>{t("allDayOverview")}</span><span>{t("timelineHint")}</span></div>
+            <div className="timeline" onClick={timelineSeek} role="slider" aria-label={t("recordingProgress")} aria-valuenow={currentMs} aria-valuemin={0} aria-valuemax={selected?.duration_ms ?? 0}>
               <div className="density">
                 {(detail?.density ?? []).map((value, index) => (
                   <i key={index} style={{ height: `${Math.max(8, value * 100)}%` }} />
@@ -1887,7 +1906,7 @@ export default function Home() {
 
           <div className="transcript-card">
             <div className="section-heading">
-              <div><span className="eyebrow">TRANSCRIPT</span><h2>{clock(windowStart)} 至 {clock(Math.min(windowStart + WINDOW_MS, selected?.duration_ms ?? 0))}</h2></div>
+              <div><span className="eyebrow">{t("transcript")}</span><h2>{clock(windowStart)} – {clock(Math.min(windowStart + WINDOW_MS, selected?.duration_ms ?? 0))}</h2></div>
               <div className="transcript-heading-actions">
                 <button
                   type="button"
@@ -1895,14 +1914,14 @@ export default function Home() {
                   disabled={!selected?.has_transcript || Boolean(exportingMarkdown)}
                   onClick={() => void exportMarkdown("transcript")}
                 >
-                  {exportingMarkdown === "transcript" ? "导出中…" : "导出对话 MD"}
+                  {exportingMarkdown === "transcript" ? t("exporting") : t("exportTranscript")}
                 </button>
-                <button className={follow ? "follow-button active" : "follow-button"} onClick={() => setFollow(true)}>{follow ? "● 正在跟随" : "回到播放位置"}</button>
+                <button className={follow ? "follow-button active" : "follow-button"} onClick={() => setFollow(true)}>{follow ? t("following") : t("returnToPlayback")}</button>
               </div>
             </div>
             <div className="uncertainty-note" role="note">
               <span className="uncertainty-swatch" aria-hidden="true" />
-              灰色底表示疑似段落，建议回听原音确认。
+              {t("uncertaintyNote")}
             </div>
             <div
               className="transcript-scroll"
@@ -1910,18 +1929,18 @@ export default function Home() {
               onScroll={() => { if (!programmaticScroll.current) setFollow(false); }}
             >
               {!selected?.has_transcript ? (
-                <div className="empty-state"><strong>这份录音还在转写</strong><p>完成后，文本会自动出现在这里；现有处理结果和费用记录会继续复用。</p></div>
+                <div className="empty-state"><strong>{t("transcriptPending")}</strong><p>{t("transcriptPendingDescription")}</p></div>
               ) : blocks.length === 0 ? (
-                <div className="empty-state"><strong>这个时段没有可辨识语音</strong><p>可继续拖动上方时间轴查看其他时段。</p></div>
+                <div className="empty-state"><strong>{t("noSpeech")}</strong><p>{t("noSpeechDescription")}</p></div>
               ) : blocks.map((block) => (
                 <article className="text-block" key={block.id}>
                   <button
                     className="block-time"
                     onClick={() => seek(block.start_ms)}
-                    title="点击从这段录音开始播放"
+                    title={t("playFromSegment")}
                   >
-                    <span className="actual-block-time"><span className="time-label">实际</span>{actualRange(selected?.recorded_at ?? "", block.start_ms, block.end_ms)}</span>
-                    <span className="elapsed-block-time"><span className="time-label">录音内</span>{clock(block.start_ms)} 至 {clock(block.end_ms)}</span>
+                    <span className="actual-block-time"><span className="time-label">{t("actual")}</span>{actualRange(selected?.recorded_at ?? "", block.start_ms, block.end_ms, locale)}</span>
+                    <span className="elapsed-block-time"><span className="time-label">{t("elapsed")}</span>{clock(block.start_ms)} – {clock(block.end_ms)}</span>
                   </button>
                   <p>
                     {block.sentences.map((sentence, index) => {
@@ -1935,25 +1954,25 @@ export default function Home() {
                             ref={(node) => { if (node) sentenceRefs.current.set(sentence.id, node); else sentenceRefs.current.delete(sentence.id); }}
                             className={`sentence ${activeSentence?.id === sentence.id ? "active" : ""} ${isUncertainSentence(sentence) ? "uncertain" : ""} ${isFavorite ? "favorite" : ""}`}
                             onClick={() => seek(sentence.start_ms)}
-                            title={`${clock(sentence.start_ms)} · 点击播放原声`}
+                            title={`${clock(sentence.start_ms)} · ${t("play")}`}
                           >{sentence.text}</button>
                           <button
                             className={`favorite-toggle ${isFavorite ? "active" : ""}`}
                             onClick={() => void toggleFavorite(sentence)}
-                            aria-label={isFavorite ? "取消收藏这句话" : "收藏这句话"}
-                            title={isFavorite ? "取消收藏（日志仍会保留）" : "收藏并高亮这句话"}
+                            aria-label={isFavorite ? t("removeFavoriteSentence") : t("favoriteSentence")}
+                            title={isFavorite ? t("removeFavoriteTitle") : t("favoriteSentenceTitle")}
                           >{isFavorite ? "★" : "☆"}</button>
                         </span>
                       );
                     })}
                   </p>
                   <details>
-                    <summary>查看原始识别与模型候选</summary>
+                    <summary>{t("originalCandidates")}</summary>
                     <div className="candidate-list">
                       {block.sentences.flatMap((sentence) => sentence.candidates.map((candidate, index) => (
                         <button key={`${sentence.id}-${candidate.provider}-${index}`} onClick={() => seek(sentence.start_ms)}>
-                          <span>{clock(sentence.start_ms)} · {candidate.provider === "local" ? "本地" : candidate.provider === "cloud" ? "云端" : "复核"}</span>
-                          <p>{candidate.text || "（无文本）"}</p>
+                          <span>{clock(sentence.start_ms)} · {candidate.provider === "local" ? t("local") : candidate.provider === "cloud" ? t("cloud") : t("review")}</span>
+                          <p>{candidate.text || t("noText")}</p>
                         </button>
                       )))}
                     </div>
@@ -1967,10 +1986,10 @@ export default function Home() {
         <aside className="topics-panel">
           <div className="section-heading topics-heading">
             <div>
-              <span className="eyebrow">{rightView === "timeline" ? (detail?.topics.length ? (detail?.summary?.source === "text_review" ? "TEXT REVIEW" : "DS SUMMARY") : "SUMMARY") : "SAVED MOMENTS"}</span>
-              <h2>{rightView === "timeline" ? (detail?.topics.length ? (detail?.summary?.source === "text_review" ? "初次文本整理" : "总结结果") : "总结") : "收藏与日志"}</h2>
+              <span className="eyebrow">{rightView === "timeline" ? (detail?.topics.length ? (detail?.summary?.source === "text_review" ? t("initialTextReview") : t("summaryResult")) : t("summary")) : t("savedMoments")}</span>
+              <h2>{rightView === "timeline" ? (detail?.topics.length ? (detail?.summary?.source === "text_review" ? t("initialTextReview") : t("summaryResult")) : t("summary")) : t("savedAndLogs")}</h2>
             </div>
-            <span>{rightView === "timeline" ? (detail?.topics.length ? `${detail?.summary?.source === "text_review" ? "初次整理 · " : ""}已覆盖 ${detail.topic_segment_count} / ${detail.segment_count} 条语音` : "尚未生成") : `${favorites.length} 条收藏`}</span>
+            <span>{rightView === "timeline" ? (detail?.topics.length ? formatMessage(locale, "coverage", { prefix: detail?.summary?.source === "text_review" ? `${t("initialTextReview")} · ` : "", covered: detail.topic_segment_count, total: detail.segment_count }) : t("notGenerated")) : formatMessage(locale, "favoriteCount", { count: favorites.length })}</span>
             {rightView === "timeline" && selected?.has_transcript && (detail?.topics.length || detail?.summary?.status === "completed") ? (
               <div className="summary-heading-actions">
                 <button
@@ -1979,22 +1998,22 @@ export default function Home() {
                   disabled={Boolean(exportingMarkdown) || summaryRunning}
                   onClick={() => void exportMarkdown("summary")}
                 >
-                  {exportingMarkdown === "summary" ? "导出中…" : "导出总结 MD"}
+                  {exportingMarkdown === "summary" ? t("exporting") : t("exportSummary")}
                 </button>
-                <button type="button" className="summary-reopen-button" onClick={openSummaryDialog}>重新总结</button>
+                <button type="button" className="summary-reopen-button" onClick={openSummaryDialog}>{t("resummarize")}</button>
               </div>
             ) : null}
           </div>
-          <div className="right-tabs" role="tablist" aria-label="右侧内容">
-            <button className={rightView === "timeline" ? "active" : ""} onClick={() => setRightView("timeline")}>总结</button>
-            <button className={rightView === "favorites" ? "active" : ""} onClick={() => setRightView("favorites")}>收藏与日志{favorites.length ? ` ${favorites.length}` : ""}</button>
+          <div className="right-tabs" role="tablist" aria-label={t("rightContent")}>
+            <button className={rightView === "timeline" ? "active" : ""} onClick={() => setRightView("timeline")}>{t("summaryTab")}</button>
+            <button className={rightView === "favorites" ? "active" : ""} onClick={() => setRightView("favorites")}>{formatMessage(locale, "savedTab", { count: favorites.length ? ` ${favorites.length}` : "" })}</button>
           </div>
           {rightView === "timeline" ? (
             <>
               {(detail?.summary?.status === "queued" || detail?.summary?.status === "running" || detail?.summary?.status === "failed") && (
                 <div className={`summary-status-card ${detail.summary.status === "failed" ? "failed" : ""}`}>
                   <div className="summary-status-card-heading">
-                    <strong>{detail.summary.status === "failed" ? "总结没有完成" : detail.summary.stage || "正在准备总结"}</strong>
+                    <strong>{detail.summary.status === "failed" ? t("summaryFailed") : localizeServerText(locale, detail.summary.stage) || t("preparingSummary")}</strong>
                     <span>{detail.summary.progress_percent ?? 0}%</span>
                   </div>
                   <div className="summary-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={detail.summary.progress_percent ?? 0}>
@@ -2002,27 +2021,27 @@ export default function Home() {
                   </div>
                   {detail.summary.status === "failed" ? (
                     <>
-                      <p>{detail.summary.error || "DeepSeek 暂时没有返回可用结果。"}</p>
-                      {detail.summary.can_retry && <button type="button" onClick={openSummaryDialog}>重新尝试</button>}
+                      <p>{localizeServerText(locale, detail.summary.error) || t("deepseekNoResult")}</p>
+                      {detail.summary.can_retry && <button type="button" onClick={openSummaryDialog}>{t("retrySummary")}</button>}
                     </>
                   ) : (
-                    <p>总结在后台进行中，可以继续查看左侧完整转写；完成后这里会自动刷新。</p>
+                    <p>{t("summaryInProgress")}</p>
                   )}
                 </div>
               )}
               {detail?.topics.length ? (
               <>
-                <div className="topic-legend"><span className="strong"><i />按提示词保留</span><span className="weak"><i />未纳入总结的内容仍在左侧转写</span></div>
+                <div className="topic-legend"><span className="strong"><i />{t("keepByPrompt")}</span><span className="weak"><i />{t("omittedOnLeft")}</span></div>
                 <div className="topic-list">
                   {detail.topics.map((topic, index) => (
                   <button key={topic.id} className={`topic-card ${topic.strength} ${activeTopic?.id === topic.id ? "active" : ""}`} onClick={() => seek(topic.start_ms)}>
                     <div className="topic-index">{String(index + 1).padStart(2, "0")}</div>
                     <div className="topic-content">
-                      <div className="topic-meta"><span className="topic-time">{clock(topic.start_ms)} 至 {clock(topic.end_ms)}</span><span className="topic-strength">{topic.strength === "strong" ? "明确话题" : "零散 / 弱话题"}</span></div>
+                      <div className="topic-meta"><span className="topic-time">{clock(topic.start_ms)} – {clock(topic.end_ms)}</span><span className="topic-strength">{topic.strength === "strong" ? t("strongTopic") : t("weakTopic")}</span></div>
                       <h3 title={topic.title}>{topic.title}</h3>
                       <p className="topic-summary" title={topic.summary}>{topic.summary}</p>
                       <div className="keywords">{topic.keywords.slice(0, 5).map((word) => <span key={word} title={word}>{word}</span>)}</div>
-                      <small>{topic.segment_count} 条语音，全部按时间顺序包含 · 点击播放</small>
+                      <small>{formatMessage(locale, "topicMeta", { count: topic.segment_count })}</small>
                     </div>
                   </button>
                   ))}
@@ -2031,10 +2050,10 @@ export default function Home() {
               ) : (
               <div className="summary-empty">
                 <span className="summary-empty-icon">✦</span>
-                <strong>{detail?.summary?.status === "completed" ? "总结完成，但没有符合要求的内容" : selected?.has_transcript ? "右侧总结尚未生成" : "录音完成转写后可总结"}</strong>
-                <p>{detail?.summary?.status === "completed" ? "左侧仍保留完整原始转写，可以换一套提示词重新整理。" : selected?.has_transcript ? "先输入这次录音的整理要求，DeepSeek 会按要求筛选和归纳内容。" : "当前录音还没有可提交给 DeepSeek 的完整转写。"}</p>
+                <strong>{detail?.summary?.status === "completed" ? t("completedNoContent") : selected?.has_transcript ? t("rightSummaryNotGenerated") : t("canSummarizeAfterTranscript")}</strong>
+                <p>{detail?.summary?.status === "completed" ? t("completedNoContentDescription") : selected?.has_transcript ? t("summaryNotGeneratedDescription") : t("canSummarizeDescription")}</p>
                 <button type="button" className="summary-open-button" disabled={!selected?.has_transcript || summaryRunning} onClick={openSummaryDialog}>
-                  {summaryRunning ? "正在总结…" : detail?.summary?.status === "completed" ? "换提示词重试" : "总结"}
+                  {summaryRunning ? t("summarizing") : detail?.summary?.status === "completed" ? t("changePromptRetry") : t("summary")}
                 </button>
                 {summaryMessage && <small className="summary-status-message">{summaryMessage}</small>}
               </div>
@@ -2043,9 +2062,9 @@ export default function Home() {
           ) : (
             <div className="saved-panel">
               <section className="favorite-section">
-                <div className="saved-section-title"><strong>高亮收藏</strong><span>点击回到原声</span></div>
+                <div className="saved-section-title"><strong>{t("highlightedFavorites")}</strong><span>{t("clickToOriginal")}</span></div>
                 {!favorites.length ? (
-                  <div className="saved-empty">点击正文旁的 ☆，重要语句会永久保存在这里。</div>
+                  <div className="saved-empty">{t("noFavorites")}</div>
                 ) : (
                   <div className="favorite-list">
                     {favorites.map((favorite) => (
@@ -2058,15 +2077,15 @@ export default function Home() {
                 )}
               </section>
               <section className="activity-section">
-                <div className="saved-section-title"><strong>永久操作日志</strong><span>仅追加，不随取消收藏删除</span></div>
+                <div className="saved-section-title"><strong>{t("permanentLog")}</strong><span>{t("logAppendOnly")}</span></div>
                 {!activity.length ? (
-                  <div className="saved-empty">还没有说话人调整或收藏操作。</div>
+                  <div className="saved-empty">{t("noActivity")}</div>
                 ) : (
                   <div className="activity-list">
                     {activity.map((event) => (
                       <div className="activity-row" key={event.event_id}>
                         <i />
-                        <div><strong>{activityText(event)}</strong><span>{new Date(event.created_at).toLocaleString("zh-CN")}</span></div>
+                        <div><strong>{activityText(event, locale)}</strong><span>{new Date(event.created_at).toLocaleString(locale)}</span></div>
                       </div>
                     ))}
                   </div>
@@ -2075,7 +2094,7 @@ export default function Home() {
             </div>
           )}
           {exportMessage && <div className="export-message" role="status">{exportMessage}</div>}
-          <div className="shortcut-note"><strong>快捷键</strong><span>空格播放 / 暂停</span><span>← → 跳转 5 秒</span><span>Shift + ← → 跳转 30 秒</span></div>
+          <div className="shortcut-note"><strong>{t("shortcuts")}</strong><span>{t("shortcutPlay")}</span><span>{t("shortcutFive")}</span><span>{t("shortcutThirty")}</span></div>
         </aside>
       </div>
     </main>

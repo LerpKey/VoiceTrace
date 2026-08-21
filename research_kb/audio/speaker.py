@@ -83,7 +83,7 @@ def anonymous_speaker_label(index: int) -> str:
         if value == 0:
             break
         value -= 1
-    return f"说话人 {letters}"
+    return f"Speaker {letters}"
 
 
 class SpeakerEmbedder:

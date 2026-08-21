@@ -1,17 +1,16 @@
-# 本地音频模型目录
+# Local Audio Models
 
-这是本地模型的默认目录。模型文件不会提交到 Git；也可以通过环境变量
-`VOICETRACE_AUDIO_MODEL_DIR` 或命令行参数 `--model-dir` 指定其他位置。
+[English](README.md) · [Chinese](README.zh-CN.md)
 
-默认目录结构：
+This is the default directory for local models. Model files are not committed to Git. Use `VOICETRACE_AUDIO_MODEL_DIR` or `--model-dir` to select another directory.
 
 ```text
 audio/
-├─ Qwen3-ASR-1.7B/   # 可选，本地 ASR，约 4.38 GiB
-├─ fsmn-vad/         # 低成本语音区间检测，约 4 MB
-└─ ERes2NetV2/       # 跨片段说话人特征，约 71 MB
+├─ Qwen3-ASR-1.7B/   # optional local ASR, about 4.38 GiB
+├─ fsmn-vad/         # low-cost speech interval detection, about 4 MB
+└─ ERes2NetV2/       # cross-segment speaker features, about 71 MB
 ```
 
-云端完整转写模式可以不安装这些模型。启用“只上传语音区间”时需要准备
-`fsmn-vad` 和 `ERes2NetV2`；启用本地 ASR 时再准备 `Qwen3-ASR-1.7B`。
-程序会在第一次运行时下载缺失模型，或者使用用户指定目录中的已有模型。
+Cloud full-transcription mode can run without these models. Speech-only cloud mode requires `fsmn-vad` and `ERes2NetV2`; local ASR additionally requires `Qwen3-ASR-1.7B`.
+
+The runtime downloads missing models on first use, or reuses models already present in the selected directory.
