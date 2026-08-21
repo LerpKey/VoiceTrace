@@ -10,7 +10,7 @@ test("ships the recording workspace instead of the starter preview", async () =>
     readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
   ]);
-  assert.match(page, /录音文本工作台/);
+  assert.match(page, /语迹 VoiceTrace/);
   assert.match(page, /currentTime/);
   assert.match(page, /scrollIntoView/);
   assert.match(page, /api\/recordings/);
@@ -217,4 +217,3 @@ test("keeps uploaded transcription progress, tokens, and costs visible", async (
   assert.match(css, /decision-cloud/);
   assert.doesNotMatch(page, /localStorage|sessionStorage/);
 });
-

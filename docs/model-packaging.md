@@ -26,7 +26,7 @@ ASR。云端完整上传不作为工作台默认入口。
 └─ Qwen3-ASR-1.7B/    # 可选
 ```
 
-开发时可以通过 `VOICE_ASSISTANT_AUDIO_MODEL_DIR` 或 `--model-dir` 指定根目录。命令行默认也走
+开发时可以通过 `VOICETRACE_AUDIO_MODEL_DIR` 或 `--model-dir` 指定根目录。命令行默认也走
 低成本云端模式；`--no-cloud --local --no-allow-cloud-upload --full-cloud` 可显式切换为纯本地
 调试路径，完整云端上传则只应在明确授权的高级场景使用 `--full-cloud`。
 运行时缺少必需的小模型会自动下载；正式安装器应优先使用随包资源，避免首次启动等待

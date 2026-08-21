@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "录音文本工作台",
-  description: "播放长录音，沿时间轴阅读转写并理解话题。",
+  title: "语迹 VoiceTrace · 录音审阅工作台",
+  description: "本地优先的中文语音转文字与录音审阅工作台。",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
@@ -36,4 +36,3 @@ export default function RootLayout({
     </html>
   );
 }
-

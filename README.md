@@ -1,50 +1,89 @@
-# 语音转文字助手开源
+# 语迹 VoiceTrace
 
-一个面向桌面端的开源语音转文字助手项目。
+本地优先的中文语音转文字与录音审阅工作台。
+
+语迹把长录音整理成可回听、可检索、可复核的文字，适合会议、访谈、课程和个人录音。录音和转写结果默认保存在本机；云端服务是可选项，工作台默认只上传经过语音活动检测的语音区间。
+
+## 功能
+
+- 可恢复的长录音流水线：静音切分、语音活动检测（VAD）、重叠去重和 Markdown 渲染；
+- 云端 ASR 与本地 Qwen3-ASR 双轨支持；
+- 说话人识别、显示名管理和跨片段说话人记忆；
+- 沿时间轴回听录音、阅读转写、查看话题、收藏句子和导出 Markdown；
+- 本地 FastAPI 服务、浏览器审阅界面、命令行入口和 Windows 启动脚本；
+- API Key 从环境变量读取，不写入代码和运行产物。
 
 ## 当前状态
 
-长录音转写模块已经迁入本仓库，当前仓库可以独立导入、运行本地 API、启动审阅界面并执行音频单元测试。
-
-当前迁移范围包括：
-
-- 可恢复的长录音流水线：静音切分、VAD、云端/本地双轨转写、重叠去重、说话人记忆和 Markdown 渲染；
-- 音频预处理、云端提供方、本地 Qwen3-ASR 提供方、说话人识别和文本复核；
-- 本地 FastAPI 审阅服务和 `audio-review-ui` 前端；
-- 命令行入口、Windows 启动脚本、测试和使用手册。
-
-模型权重、录音、转写产物和前端 `node_modules` 不进入仓库。模型默认放在 `data/models/audio`，也可以通过 `VOICE_ASSISTANT_AUDIO_MODEL_DIR` 或 `--model-dir` 指定用户自己的模型目录。
+版本 `0.1.0` 仍处于开发阶段，当前重点是 Windows 本机个人使用。项目暂不提供多人账号、远程音频存储或可直接暴露到公网的部署方案。
 
 ## 快速开始
 
-开发版可以使用 `requirements.txt` 安装基础依赖，也可以使用 `pyproject.toml` 和 uv：
+需要 Python 3.12、[uv](https://docs.astral.sh/uv/) 和 Node.js 22.13 或更高版本。
 
 ```powershell
-python -m pip install -r requirements.txt
 uv sync
-uv run file-assistant --help
+cd audio-review-ui
+npm install
+cd ..
+uv run voice-trace --help
 ```
 
-本地审阅工作台：
+启动录音审阅工作台：
 
 ```powershell
 启动录音文本工作台.bat
 ```
 
-只使用本地模型时需要额外安装本地识别依赖：
+也可以手动启动：
 
 ```powershell
-python -m pip install -r requirements-local.txt
+uv run voice-trace audio-review --data-dir data
+```
+
+只使用本地 ASR 时，额外安装本地依赖：
+
+```powershell
 uv sync --extra local
 ```
 
-工作台默认使用低成本云端增强：先用 VAD 切出真正的人声区间，过滤空白和噪音，再使用 ERes2NetV2 保持说话人身份，只上传语音区间。云端完整转写不作为普通入口；本地 ASR 才需要额外安装 Qwen3-ASR。
+具体的模型准备、API Key 配置和审阅流程见[录音审阅工作台使用手册](docs/reference/audio-review-user-guide.md)。
 
-具体模型准备、云端 API 配置和审阅工作流见 [录音文本工作台使用手册](docs/reference/audio-review-user-guide.md)。
+## 运行模式
 
-## 开发原则
+- 云端增强：需要设置 `DASHSCOPE_API_KEY`；工作台默认先在本地筛选语音区间，再上传这些区间。
+- 本地 ASR：安装 `local` 可选依赖，并准备 Qwen3-ASR 模型。
+- 文本整理与总结：需要时设置 `DEEPSEEK_API_KEY`；原始转写不会被总结流程覆盖。
 
-- 本地优先，明确区分本地处理与可选云端服务。
-- 优先保证中文识别、专有名词和跨应用输入的稳定性。
-- 每项功能都应尽量可测试、可解释、可回退。
-- 发布前检查依赖、模型和第三方组件的许可证。
+模型默认放在 `data/models/audio`，也可以通过 `VOICETRACE_AUDIO_MODEL_DIR` 或 `--model-dir` 指定其他目录。
+
+## 项目结构
+
+```text
+research_kb/                 Python 运行时、API 和命令行入口
+audio-review-ui/             浏览器审阅界面
+docs/                        使用手册和模型说明
+tests/                       单元测试和项目约束测试
+data/models/audio/           本地模型目录占位，不提交模型权重
+```
+
+## 开发与检查
+
+```powershell
+uv sync --extra dev
+uv run pytest
+uv run ruff check .
+cd audio-review-ui
+npm test
+```
+
+开发 benchmark、模型、缓存、录音和转写结果只保留在本地，不进入 Git。不要提交 `.env`、API Key、私钥、录音、模型权重或个人转写内容。
+
+## 文档
+
+- [录音审阅工作台使用手册](docs/reference/audio-review-user-guide.md)
+- [模型打包与安装约定](docs/model-packaging.md)
+
+## 许可证
+
+当前仓库尚未附带许可证文件。项目维护者确定许可证并提交 `LICENSE` 之前，不应将本项目视为已经授予公众自由使用、修改或分发的权利。

@@ -1,8 +1,8 @@
-# 录音文本工作台使用手册
+# 语迹 VoiceTrace 录音审阅工作台使用手册
 
 ## 1. 发布状态
 
-当前版本适合作为 **Windows 本机个人测试版** 发布和日常使用，版本号为 0.6.0。
+当前版本 `0.1.0` 适合作为 **Windows 本机个人开发版** 使用和测试。
 
 | 使用场景 | 结论 | 原因 |
 |---|---|---|
@@ -14,7 +14,7 @@
 
 ## 2. 软件用途
 
-录音文本工作台用于：
+语迹的录音审阅工作台用于：
 
 - 播放数小时的长录音并快速定位；
 - 将转写句子与原声进行比对；
@@ -41,7 +41,7 @@
 
 ```powershell
 cd "项目根目录"
-uv run file-assistant audio-review --data-dir data
+uv run voice-trace audio-review --data-dir data
 ```
 
 程序会启动本机服务并打开：
@@ -55,17 +55,17 @@ http://localhost:3000/
 如果不希望自动打开浏览器：
 
 ```powershell
-uv run file-assistant audio-review --data-dir data --no-open-browser
+uv run voice-trace audio-review --data-dir data --no-open-browser
 ```
 
 如果前端目录不在默认位置，可显式指定：
 
 ```powershell
-uv run file-assistant audio-review --data-dir data `
+uv run voice-trace audio-review --data-dir data `
   --frontend-dir audio-review-ui
 ```
 
-实时参数说明可运行 `uv run file-assistant audio-review --help`。
+实时参数说明可运行 `uv run voice-trace audio-review --help`。
 
 ### 3.2 首次安装或更换电脑
 
@@ -155,7 +155,7 @@ npm install
 高把握错字，不应把 `[疑似]` 当作已经确认。
 
 ### 7.2 按要求生成总结
-总结、提示词库、进度条、失败原因和重试说明见[录音总结与提示词库](audio-review-summary-guide.md)。
+总结、提示词库、进度条、失败原因和重试说明见本手册第 7 节和第 13 节。
 
 ## 8. 管理说话人
 
@@ -284,7 +284,7 @@ data/audio-review/
 本机接口没有运行或端口被占用。关闭旧进程后重新运行：
 
 ```powershell
-uv run file-assistant audio-review --data-dir data
+uv run voice-trace audio-review --data-dir data
 ```
 
 ### 收藏汇总没有立即变化

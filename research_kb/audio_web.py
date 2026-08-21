@@ -2405,7 +2405,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         yield
 
     app = FastAPI(
-        title="录音文本工作台",
+        title="语迹 VoiceTrace",
         docs_url=None,
         redoc_url=None,
         lifespan=lifespan,

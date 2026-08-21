@@ -1,7 +1,7 @@
 # 本地音频模型目录
 
 这是本地模型的默认目录。模型文件不会提交到 Git；也可以通过环境变量
-`VOICE_ASSISTANT_AUDIO_MODEL_DIR` 或命令行参数 `--model-dir` 指定其他位置。
+`VOICETRACE_AUDIO_MODEL_DIR` 或命令行参数 `--model-dir` 指定其他位置。
 
 默认目录结构：
 

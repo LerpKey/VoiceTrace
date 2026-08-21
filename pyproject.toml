@@ -3,9 +3,9 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "voice-to-text-assistant"
+name = "voicetrace"
 version = "0.1.0"
-description = "Standalone long-recording transcription assistant with local and optional cloud ASR."
+description = "Local-first voice transcription and review workspace with optional cloud ASR."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -36,8 +36,7 @@ dev = [
 ]
 
 [project.scripts]
-voice-to-text = "research_kb.audio_cli:app"
-file-assistant = "research_kb.audio_cli:app"
+voice-trace = "research_kb.audio_cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["research_kb"]
@@ -47,6 +46,10 @@ exclude = [
     "/.venv",
     "/data/models",
     "/.benchmarks",
+    "/benchmarks",
+    "/data/audio-review",
+    "/AGENTS.md",
+    "/docs/open-source-readiness.md",
     "/**/__pycache__",
     "/audio-review-ui/node_modules",
     "/audio-review-ui/.next",

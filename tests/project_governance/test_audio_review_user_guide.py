@@ -18,7 +18,7 @@ def test_audio_review_manual_covers_live_launcher_and_primary_ui() -> None:
     help_result = CliRunner().invoke(app, ["audio-review", "--help"])
 
     assert help_result.exit_code == 0, help_result.output
-    assert "uv run file-assistant audio-review" in manual
+    assert "uv run voice-trace audio-review" in manual
     for option in set(LONG_OPTION.findall(help_result.stdout)):
         assert option in manual, f"audio-review lacks documented {option}"
 
@@ -39,11 +39,10 @@ def test_windows_launcher_starts_the_workspace_from_its_own_directory() -> None:
 
     assert launcher_bytes.isascii()
     assert 'cd /d "%~dp0"' in launcher
-    assert "uv run file-assistant audio-review" in launcher
+    assert "uv run voice-trace audio-review" in launcher
     assert '--data-dir "%~dp0data"' in launcher
     assert '--frontend-dir "%~dp0audio-review-ui"' in launcher
     assert "--open-browser" in launcher
     assert "http://localhost:3000/" in launcher
     assert "http://127.0.0.1:8765/api/health" in launcher
     assert WINDOWS_LAUNCHER.name in manual
-

@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from research_kb.audio_web import serve_audio_review
 from research_kb.config import AppSettings
 
-app = typer.Typer(name="voice-to-text", no_args_is_help=True)
+app = typer.Typer(name="voice-trace", no_args_is_help=True)
 
 
 @app.command("audio-review")

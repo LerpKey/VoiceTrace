@@ -1192,7 +1192,7 @@ export default function Home() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">声</span>
-          <div><h1>录音文本工作台</h1><p>沿着声音，读懂一天</p></div>
+          <div><h1>语迹 VoiceTrace</h1><p>录音审阅工作台 · 沿着声音，读懂一天</p></div>
         </div>
         <div className="top-actions">
           <button className="recording-picker" onClick={openRecordingPicker} aria-haspopup="dialog">

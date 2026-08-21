@@ -23,7 +23,7 @@ echo Starting the audio workspace. Keep this window open...
 echo The page will open automatically: http://localhost:3000/
 echo.
 
-uv run file-assistant audio-review --data-dir "%~dp0data" --frontend-dir "%~dp0audio-review-ui" --open-browser
+uv run voice-trace audio-review --data-dir "%~dp0data" --frontend-dir "%~dp0audio-review-ui" --open-browser
 set "APP_EXIT_CODE=%errorlevel%"
 
 if not "%APP_EXIT_CODE%"=="0" (

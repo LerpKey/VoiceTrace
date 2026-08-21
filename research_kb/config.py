@@ -17,11 +17,16 @@ class AppSettings(BaseSettings):
 
     data_dir: Path = Field(
         default=Path("data"),
-        validation_alias=AliasChoices("FILE_ASSISTANT_DATA_DIR", "RESEARCH_KB_DATA_DIR"),
+        validation_alias=AliasChoices(
+            "VOICETRACE_DATA_DIR",
+            "FILE_ASSISTANT_DATA_DIR",
+            "RESEARCH_KB_DATA_DIR",
+        ),
     )
     audio_model_dir: Path | None = Field(
         default=None,
         validation_alias=AliasChoices(
+            "VOICETRACE_AUDIO_MODEL_DIR",
             "VOICE_ASSISTANT_AUDIO_MODEL_DIR",
             "FILE_ASSISTANT_AUDIO_MODEL_DIR",
             "RESEARCH_KB_AUDIO_MODEL_DIR",
