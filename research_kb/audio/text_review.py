@@ -1,6 +1,5 @@
 """Constrained DeepSeek review and topic capture for timestamped transcripts."""
 
-# ruff: noqa: RUF001 - Chinese transcript instructions and labels are intentional.
 
 from __future__ import annotations
 

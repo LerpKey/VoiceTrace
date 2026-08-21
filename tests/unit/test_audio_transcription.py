@@ -1,6 +1,5 @@
 """Deterministic tests for long-recording transcription invariants."""
 
-# ruff: noqa: RUF001 - Chinese transcript punctuation is part of the assertions.
 
 from __future__ import annotations
 

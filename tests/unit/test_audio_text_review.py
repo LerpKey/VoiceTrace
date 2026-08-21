@@ -1,6 +1,5 @@
 """Tests for constrained transcript review and topic capture."""
 
-# ruff: noqa: RUF001 - Chinese uncertainty punctuation is intentional test data.
 
 from __future__ import annotations
 
@@ -11,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import research_kb.audio.text_review as text_review
+from research_kb.audio import text_review
 from research_kb.audio.domain import (
     ProviderCandidate,
     RecordingSource,

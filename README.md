@@ -7,7 +7,8 @@
 ## 功能
 
 - 可恢复的长录音流水线：静音切分、语音活动检测（VAD）、重叠去重和 Markdown 渲染；
-- 云端 ASR 与本地 Qwen3-ASR 双轨支持；
+- 默认使用云端 ASR、本地 CPU VAD 和 ERes2NetV2 说话人关联；
+- 可选安装并启用本地 Qwen3-ASR，不作为默认路径的硬件要求；
 - 说话人识别、显示名管理和跨片段说话人记忆；
 - 沿时间轴回听录音、阅读转写、查看话题、收藏句子和导出 Markdown；
 - 本地 FastAPI 服务、浏览器审阅界面、命令行入口和 Windows 启动脚本；
@@ -41,7 +42,8 @@ uv run voice-trace --help
 uv run voice-trace audio-review --data-dir data
 ```
 
-只使用本地 ASR 时，额外安装本地依赖：
+默认链路会使用 CPU 版 FunASR 做 VAD 和说话人特征提取，不要求 CUDA。
+如果需要本地 Qwen3-ASR，再额外安装本地识别依赖：
 
 ```powershell
 uv sync --extra local
@@ -51,8 +53,8 @@ uv sync --extra local
 
 ## 运行模式
 
-- 云端增强：需要设置 `DASHSCOPE_API_KEY`；工作台默认先在本地筛选语音区间，再上传这些区间。
-- 本地 ASR：安装 `local` 可选依赖，并准备 Qwen3-ASR 模型。
+- 云端增强：需要设置 `DASHSCOPE_API_KEY`；工作台默认先在本地用 CPU VAD 筛选语音区间，再上传这些区间，并用 CPU ERes2NetV2 关联说话人。
+- 本地 ASR：默认关闭；安装 `local` 可选依赖、准备 Qwen3-ASR 模型，并显式传入 `--local` 才会启用。该路径需要 CUDA。
 - 文本整理与总结：需要时设置 `DEEPSEEK_API_KEY`；原始转写不会被总结流程覆盖。
 
 模型默认放在 `data/models/audio`，也可以通过 `VOICETRACE_AUDIO_MODEL_DIR` 或 `--model-dir` 指定其他目录。

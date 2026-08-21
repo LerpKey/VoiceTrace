@@ -1,5 +1,2 @@
 -r requirements.txt
-funasr>=1.4.1
 qwen-asr>=0.0.6
-torch>=2.1
-torchaudio>=2.1

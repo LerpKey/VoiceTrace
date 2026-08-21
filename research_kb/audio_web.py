@@ -1,6 +1,5 @@
 """Local web API for listening to long recordings with transcripts."""
 
-# ruff: noqa: RUF001 - Chinese interface text intentionally uses Chinese punctuation.
 
 from __future__ import annotations
 
@@ -88,7 +87,7 @@ class RecordingEntry:
 def _read_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
-        raise ValueError(f"JSON root is not an object: {path}")
+        raise ValueError(f"JSON root is not an object: {path}")  # noqa: TRY004
     return value
 
 
@@ -2059,7 +2058,7 @@ def _run_text_review_repair(job_path: Path) -> None:
                 updated_at=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             )
             _write_json(manifest_path, manifest)
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - job boundary must persist any failure
             message = (
                 str(error)
                 if isinstance(error, TranscriptTextReviewError)
@@ -2205,7 +2204,7 @@ def _run_recording_summary(
                 error=None,
                 can_retry=True,
             )
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - API boundary must return a recovery state
             message = (
                 str(error)
                 if isinstance(error, TranscriptTextReviewError)

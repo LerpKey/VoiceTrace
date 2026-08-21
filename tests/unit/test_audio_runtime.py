@@ -1,6 +1,5 @@
 """Mocked runtime tests for the resumable audio providers and orchestrator."""
 
-# ruff: noqa: RUF001 - Chinese transcript punctuation is part of the assertions.
 
 from __future__ import annotations
 
@@ -360,6 +359,9 @@ def test_local_provider_batches_and_unloads(
             return [types.SimpleNamespace(text=" 本地文本 ")]
 
     monkeypatch.setitem(sys.modules, "qwen_asr", types.SimpleNamespace(Qwen3ASRModel=FakeModel))
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
     client = providers.LocalQwenTranscriber(model_directory=tmp_path, batch_size=1)
     result = client.transcribe([(tmp_path / "clip.wav", 10, 20)])
     assert result[0].text == "本地文本"
@@ -974,6 +976,7 @@ def test_transcriber_validation_sources_and_manifest(
                 tmp_path / "out.md",
                 run_cloud=False,
                 speech_only_cloud=True,
+                run_local=True,
             )
         )
     with pytest.raises(pipeline.RecordingTranscriptionError, match="must not be negative"):
@@ -1202,13 +1205,20 @@ def test_speaker_mapping_extracts_samples_and_embedder_handles_model(
 
             return [{"spk_embedding": torch.tensor([[3.0, 4.0]])}]
 
+    speaker_kwargs: dict[str, object] = {}
+
+    def fake_auto_model(**kwargs: object) -> FakeSpeakerModel:
+        speaker_kwargs.update(kwargs)
+        return FakeSpeakerModel()
+
     monkeypatch.setitem(
         sys.modules,
         "funasr",
-        types.SimpleNamespace(AutoModel=lambda **_kwargs: FakeSpeakerModel()),
+        types.SimpleNamespace(AutoModel=fake_auto_model),
     )
     vector = SpeakerEmbedder(model_directory=tmp_path).embed((audio,))
     assert vector.tolist() == pytest.approx([0.6, 0.8])
+    assert speaker_kwargs["device"] == "cpu"
 
 
 def test_adjudication_unclear_missing_and_hallucination_suppression(tmp_path: Path) -> None:

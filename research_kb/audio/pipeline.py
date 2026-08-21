@@ -1,6 +1,5 @@
 """Resumable orchestration for dual-track long-recording transcription."""
 
-# ruff: noqa: RUF001 - Chinese ASR context and uncertainty markers are intentional.
 
 from __future__ import annotations
 
@@ -91,7 +90,8 @@ class TranscriptionOptions:
     source_directory: Path
     output_path: Path
     model_directory: Path | None = None
-    run_local: bool = True
+    # Cloud ASR is the default quality path. Local Qwen3-ASR remains opt-in.
+    run_local: bool = False
     run_cloud: bool = True
     allow_cloud_upload: bool = False
     resume: bool = True
@@ -122,7 +122,7 @@ def _ensure_model(model_id: str, directory: Path) -> Path:
         modelscope.snapshot_download(model_id, local_dir=str(target))
         marker.touch()
         return target
-    except Exception as modelscope_error:
+    except Exception as modelscope_error:  # noqa: BLE001 - third-party download errors vary
         os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
         os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
         try:
@@ -131,7 +131,7 @@ def _ensure_model(model_id: str, directory: Path) -> Path:
             huggingface_download(repo_id=model_id, local_dir=target)
             marker.touch()
             return target
-        except Exception as huggingface_error:
+        except Exception as huggingface_error:  # noqa: BLE001 - third-party errors vary
             raise RecordingTranscriptionError(
                 f"could not download local model {model_id}"
             ) from ExceptionGroup("model download failures", [modelscope_error, huggingface_error])
@@ -507,7 +507,7 @@ class RecordingTranscriber:
                 created = ProcessingManifest.model_validate_json(
                     self.manifest_path.read_bytes()
                 ).created_at
-            except Exception:
+            except Exception:  # noqa: BLE001 - corrupt legacy manifests fall back safely
                 created = now
         billed = _unique_billed_seconds(cloud_results)
         text_usage = self._text_analysis.usage if self._text_analysis else ()

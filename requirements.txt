@@ -1,4 +1,5 @@
 fastapi>=0.141,<1
+funasr>=1.4.1
 imageio-ffmpeg>=0.6.0
 numpy>=2.3.5
 openai==2.46.0
@@ -7,5 +8,7 @@ pydantic-settings>=2.9,<3
 python-multipart>=0.0.22,<1
 requests>=2.34.2
 soundfile>=0.14.0
+torch>=2.1
+torchaudio>=2.1
 typer>=0.16,<1
 uvicorn>=0.52,<1

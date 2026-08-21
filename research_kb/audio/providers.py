@@ -232,7 +232,7 @@ class DashScopeFileTranscriber:
                     billed_seconds = (
                         audio_info.frames + audio_info.samplerate - 1
                     ) // audio_info.samplerate
-                except Exception:
+                except Exception:  # noqa: BLE001 - soundfile backends raise varied errors
                     billed_seconds = 0
                 sanitized = sanitize_external_payload(query_payload)
                 return CloudResult(
@@ -307,7 +307,7 @@ class DashScopeFileTranscriber:
 
             audio_info = soundfile.info(str(path))
             input_seconds = (audio_info.frames + audio_info.samplerate - 1) // audio_info.samplerate
-        except Exception:
+        except Exception:  # noqa: BLE001 - soundfile backends raise varied errors
             input_seconds = provider_seconds
         # The API may report detected-speech duration rather than full uploaded
         # duration. Cost control always uses the more conservative value.

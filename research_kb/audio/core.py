@@ -1,6 +1,5 @@
 """Pure, testable audio-transcription planning and rendering logic."""
 
-# ruff: noqa: RUF001 - Chinese transcript punctuation is intentional.
 
 from __future__ import annotations
 
