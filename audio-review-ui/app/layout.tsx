@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "语迹 VoiceTrace · 录音审阅工作台",
-  description: "本地优先的中文语音转文字与录音审阅工作台。",
+  title: "VoiceTrace · Recording Review Workspace",
+  description: "A local-first voice transcription and recording review workspace.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
@@ -27,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="en">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

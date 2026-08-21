@@ -1,6 +1,5 @@
 """Tests for constrained transcript review and topic capture."""
 
-# ruff: noqa: RUF001 - Chinese uncertainty punctuation is intentional test data.
 
 from __future__ import annotations
 
@@ -11,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import research_kb.audio.text_review as text_review
+from research_kb.audio import text_review
 from research_kb.audio.domain import (
     ProviderCandidate,
     RecordingSource,
@@ -45,8 +44,8 @@ def _document() -> TranscriptDocument:
             recording_id=source.recording_id,
             start_ms=1_000,
             end_ms=5_000,
-            speaker="说话人 A",
-            text="[疑似：指数空间不够]",
+            speaker="Speaker A",
+            text="[Uncertain: Index space is insufficient]",
             decision="unclear",
             confidence=0.4,
             flags=("models_disagree", "no_majority"),
@@ -54,14 +53,14 @@ def _document() -> TranscriptDocument:
                 ProviderCandidate(
                     provider="cloud",
                     model="cloud",
-                    text="指数空间不够",
+                    text="Index space is insufficient",
                     start_ms=1_000,
                     end_ms=5_000,
                 ),
                 ProviderCandidate(
                     provider="local",
                     model="local",
-                    text="存储空间不够",
+                    text="Storage space is insufficient",
                     start_ms=1_000,
                     end_ms=5_000,
                 ),
@@ -72,8 +71,8 @@ def _document() -> TranscriptDocument:
             recording_id=source.recording_id,
             start_ms=6_000,
             end_ms=9_000,
-            speaker="说话人 B",
-            text="预算是120元",
+            speaker="Speaker B",
+            text="Budget is 120 yuan",
             decision="unclear",
             confidence=0.4,
             flags=("models_disagree", "no_majority", "sensitive_difference"),
@@ -81,14 +80,14 @@ def _document() -> TranscriptDocument:
                 ProviderCandidate(
                     provider="cloud",
                     model="cloud",
-                    text="预算是120元",
+                    text="Budget is 120 yuan",
                     start_ms=6_000,
                     end_ms=9_000,
                 ),
                 ProviderCandidate(
                     provider="local",
                     model="local",
-                    text="预算是130元",
+                    text="Budget is 130 yuan",
                     start_ms=6_000,
                     end_ms=9_000,
                 ),
@@ -99,15 +98,15 @@ def _document() -> TranscriptDocument:
             recording_id=source.recording_id,
             start_ms=12_000,
             end_ms=18_000,
-            speaker="说话人 C",
-            text="第二场开始讨论交付",
+            speaker="Speaker C",
+            text="The second session starts delivery discussion",
             decision="cloud_primary",
             confidence=0.6,
             candidates=(
                 ProviderCandidate(
                     provider="cloud",
                     model="cloud",
-                    text="第二场开始讨论交付",
+                    text="The second session starts delivery discussion",
                     start_ms=12_000,
                     end_ms=18_000,
                 ),
@@ -115,7 +114,7 @@ def _document() -> TranscriptDocument:
         ),
     )
     return TranscriptDocument(
-        title="连续会议",
+        title="Consecutive meetings",
         generated_at=datetime.now(UTC),
         sources=(source,),
         speakers=(),
@@ -144,19 +143,19 @@ def test_deepseek_review_selects_only_existing_text_and_splits_meetings(
             ],
             "topics": [
                 {
-                    "title": "存储容量与预算",
+                    "title": "Storage capacity and budget",
                     "start_segment_id": "segment_0000001",
                     "end_segment_id": "segment_0000002",
-                    "summary": "讨论存储容量和预算。",
-                    "keywords": ["存储", "预算"],
+                    "summary": "Discusses storage capacity and budget.",
+                    "keywords": ["storage", "budget"],
                     "evidence_segment_ids": ["segment_0000001", "segment_0000002"],
                 },
                 {
-                    "title": "交付安排",
+                    "title": "Delivery plan",
                     "start_segment_id": "segment_0000003",
                     "end_segment_id": "segment_0000003",
-                    "summary": "第二场讨论交付。",
-                    "keywords": ["交付"],
+                    "summary": "The second session discusses delivery.",
+                    "keywords": ["delivery"],
                     "evidence_segment_ids": ["segment_0000003"],
                 },
             ],
@@ -165,27 +164,27 @@ def test_deepseek_review_selects_only_existing_text_and_splits_meetings(
             "topic_groups": [
                 {
                     "source_topic_ids": ["topic_stub_0001"],
-                    "title": "存储容量与预算",
-                    "summary": "讨论存储容量和预算。",
-                    "keywords": ["存储", "预算"],
+                    "title": "Storage capacity and budget",
+                    "summary": "Discusses storage capacity and budget.",
+                    "keywords": ["storage", "budget"],
                 },
                 {
                     "source_topic_ids": ["topic_stub_0002"],
-                    "title": "交付安排",
-                    "summary": "讨论交付安排。",
-                    "keywords": ["交付"],
+                    "title": "Delivery plan",
+                    "summary": "Discusses the delivery plan.",
+                    "keywords": ["delivery"],
                 },
             ],
             "meetings": [
                 {
                     "source_topic_ids": ["topic_stub_0001"],
-                    "title": "第一场会议",
-                    "summary": "存储与预算。",
+                    "title": "First meeting",
+                    "summary": "Storage and budget.",
                 },
                 {
                     "source_topic_ids": ["topic_stub_0002"],
-                    "title": "第二场会议",
-                    "summary": "交付安排。",
+                    "title": "Second meeting",
+                    "summary": "Delivery plan.",
                 },
             ],
         },
@@ -207,19 +206,19 @@ def test_deepseek_review_selects_only_existing_text_and_splits_meetings(
         expected_meeting_count=2,
     ).review(_document())
 
-    assert reviewed.segments[0].text == "存储空间不够"
+    assert reviewed.segments[0].text == "Storage space is insufficient"
     assert reviewed.segments[0].decision == "text_context"
     assert "no_majority" not in reviewed.segments[0].flags
     assert {candidate.text for candidate in reviewed.segments[0].candidates} == {
-        "指数空间不够",
-        "存储空间不够",
+        "Index space is insufficient",
+        "Storage space is insufficient",
     }
-    assert reviewed.segments[1].text == "预算是120元"
+    assert reviewed.segments[1].text == "Budget is 120 yuan"
     assert len(analysis.meetings) == 2
     assert analysis.expected_meeting_count == 2
     assert analysis.estimated_cost_cny > 0
     markdown = render_topic_markdown(reviewed, analysis)
-    assert "第一场会议" in markdown
+    assert "Meeting 1" in markdown
     assert "segment_0000001" in markdown
 
     cached_reviewed, cached_analysis = DeepSeekTranscriptReviewer(
@@ -255,7 +254,7 @@ def test_deepseek_accepts_descriptive_reason_code_longer_than_forty_characters()
         batch_characters=20_000,
     ).review(_document())
 
-    assert reviewed.segments[0].text == "存储空间不够"
+    assert reviewed.segments[0].text == "Storage space is insufficient"
     assert analysis.decisions[0].reason_code == "proper_name_and_brand_resolved_by_context"
 
 
@@ -422,7 +421,7 @@ def test_user_prompt_guides_relevance_and_is_recorded() -> None:
         requests.append(payload)
         return json.dumps({"decisions": [], "topics": []}, ensure_ascii=False)
 
-    prompt = "只保留财经内容，删除感谢礼物、唱歌和闲聊。"
+    prompt = "Keep only finance content; remove gifts, singing, and small talk."
     _, analysis = DeepSeekTranscriptReviewer(
         api_key="temporary",
         user_prompt=prompt,
@@ -443,34 +442,34 @@ def test_deepseek_unconstrained_review_uses_model_meeting_groups() -> None:
                 "decisions": [],
                 "topics": [
                     {
-                        "title": "容量",
+                        "title": "Capacity",
                         "start_segment_id": "segment_0000001",
                         "end_segment_id": "segment_0000002",
-                        "summary": "讨论容量。",
+                        "summary": "Discusses capacity.",
                         "evidence_segment_ids": ["segment_0000001"],
                     },
                     {
-                        "title": "交付",
+                        "title": "Delivery",
                         "start_segment_id": "segment_0000003",
                         "end_segment_id": "segment_0000003",
-                        "summary": "讨论交付。",
+                        "summary": "Discusses delivery.",
                         "evidence_segment_ids": ["segment_0000003"],
                     },
                 ],
             },
             {
                 "topic_groups": [
-                    {"source_topic_ids": ["topic_stub_0001"], "title": "容量"},
-                    {"source_topic_ids": ["topic_stub_0002"], "title": "交付"},
+                    {"source_topic_ids": ["topic_stub_0001"], "title": "Capacity"},
+                    {"source_topic_ids": ["topic_stub_0002"], "title": "Delivery"},
                 ],
                 "meetings": [
                     {
                         "source_topic_ids": ["topic_stub_0001"],
-                        "title": "容量会议",
+                        "title": "Capacity meeting",
                     },
                     {
                         "source_topic_ids": ["topic_stub_0002"],
-                        "title": "交付会议",
+                        "title": "Delivery meeting",
                     },
                 ],
             },
@@ -484,20 +483,20 @@ def test_deepseek_unconstrained_review_uses_model_meeting_groups() -> None:
 
     _, analysis = reviewer.review(_document())
 
-    assert [meeting.title for meeting in analysis.meetings] == ["容量会议", "交付会议"]
-    assert analysis.meetings[0].summary == "容量"
+    assert [meeting.title for meeting in analysis.meetings] == ["Capacity meeting", "Delivery meeting"]
+    assert analysis.meetings[0].summary == "Capacity"
     assert analysis.meetings[1].topic_ids == ("topic_0002",)
 
 
 def test_deepseek_transport_error_is_redacted() -> None:
     reviewer = DeepSeekTranscriptReviewer(
-        api_key="temporary-secret",
-        requester=lambda _request: (_ for _ in ()).throw(RuntimeError("temporary-secret")),
+        api_key="fixture",
+        requester=lambda _request: (_ for _ in ()).throw(RuntimeError("fixture")),
     )
 
     with pytest.raises(TranscriptTextReviewError, match="RuntimeError") as caught:
         reviewer.review(_document())
-    assert "temporary-secret" not in str(caught.value)
+    assert "fixture" not in str(caught.value)
 
 
 @pytest.mark.parametrize(
@@ -657,10 +656,10 @@ def test_deepseek_can_fallback_locally_when_consolidation_json_is_truncated() ->
             ],
             "topics": [
                 {
-                    "title": "存储空间",
+                    "title": "Storage space",
                     "start_segment_id": "segment_0000001",
                     "end_segment_id": "segment_0000003",
-                    "summary": "讨论存储与交付。",
+                    "summary": "Discusses storage and delivery.",
                 }
             ],
         }
@@ -675,9 +674,9 @@ def test_deepseek_can_fallback_locally_when_consolidation_json_is_truncated() ->
 
     reviewed, analysis = reviewer.review(_document())
 
-    assert reviewed.segments[0].text == "存储空间不够"
-    assert analysis.topics[0].title == "存储空间"
-    assert analysis.meetings[0].title == "meeting 录音"
+    assert reviewed.segments[0].text == "Storage space is insufficient"
+    assert analysis.topics[0].title == "Storage space"
+    assert analysis.meetings[0].title == "meeting recording"
 
 
 def test_deepseek_can_fallback_locally_when_consolidation_request_exceeds_cap() -> None:
@@ -686,10 +685,10 @@ def test_deepseek_can_fallback_locally_when_consolidation_request_exceeds_cap() 
             "decisions": [],
             "topics": [
                 {
-                    "title": "存储空间",
+                    "title": "Storage space",
                     "start_segment_id": "segment_0000001",
                     "end_segment_id": "segment_0000003",
-                    "summary": "讨论存储与交付。",
+                    "summary": "Discusses storage and delivery.",
                 }
             ],
         }
@@ -711,8 +710,8 @@ def test_deepseek_can_fallback_locally_when_consolidation_request_exceeds_cap() 
     ).review(_document())
 
     assert calls == 2
-    assert analysis.topics[0].title == "存储空间"
-    assert analysis.meetings[0].title == "meeting 录音"
+    assert analysis.topics[0].title == "Storage space"
+    assert analysis.meetings[0].title == "meeting recording"
 
 
 def test_deepseek_can_fallback_when_consolidation_coverage_is_incomplete() -> None:
@@ -721,10 +720,10 @@ def test_deepseek_can_fallback_when_consolidation_coverage_is_incomplete() -> No
             "decisions": [],
             "topics": [
                 {
-                    "title": "存储空间",
+                    "title": "Storage space",
                     "start_segment_id": "segment_0000001",
                     "end_segment_id": "segment_0000003",
-                    "summary": "讨论存储与交付。",
+                    "summary": "Discusses storage and delivery.",
                 }
             ],
         }
@@ -745,8 +744,8 @@ def test_deepseek_can_fallback_when_consolidation_coverage_is_incomplete() -> No
 
     _reviewed, analysis = reviewer.review(_document())
 
-    assert analysis.topics[0].title == "存储空间"
-    assert analysis.meetings[0].title == "meeting 录音"
+    assert analysis.topics[0].title == "Storage space"
+    assert analysis.meetings[0].title == "meeting recording"
 
 
 def test_deepseek_rejects_reordered_topic_cover() -> None:

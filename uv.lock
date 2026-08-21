@@ -2180,6 +2180,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "funasr" },
     { name = "imageio-ffmpeg" },
     { name = "numpy" },
     { name = "openai" },
@@ -2188,6 +2189,8 @@ dependencies = [
     { name = "python-multipart" },
     { name = "requests" },
     { name = "soundfile" },
+    { name = "torch" },
+    { name = "torchaudio" },
     { name = "typer" },
     { name = "uvicorn" },
 ]
@@ -2199,16 +2202,13 @@ dev = [
     { name = "ruff" },
 ]
 local = [
-    { name = "funasr" },
     { name = "qwen-asr" },
-    { name = "torch" },
-    { name = "torchaudio" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.141,<1" },
-    { name = "funasr", marker = "extra == 'local'", specifier = ">=1.4.1" },
+    { name = "funasr", specifier = ">=1.4.1" },
     { name = "imageio-ffmpeg", specifier = ">=0.6.0" },
     { name = "numpy", specifier = ">=2.3.5" },
     { name = "openai", specifier = "==2.46.0" },
@@ -2221,8 +2221,8 @@ requires-dist = [
     { name = "requests", specifier = ">=2.34.2" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12,<1" },
     { name = "soundfile", specifier = ">=0.14.0" },
-    { name = "torch", marker = "extra == 'local'", specifier = ">=2.1" },
-    { name = "torchaudio", marker = "extra == 'local'", specifier = ">=2.1" },
+    { name = "torch", specifier = ">=2.1" },
+    { name = "torchaudio", specifier = ">=2.1" },
     { name = "typer", specifier = ">=0.16,<1" },
     { name = "uvicorn", specifier = ">=0.52,<1" },
 ]

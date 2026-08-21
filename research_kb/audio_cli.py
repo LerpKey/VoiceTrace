@@ -32,7 +32,7 @@ def audio_review(
 @app.command("transcribe-recordings")
 def transcribe_recordings(
     source_directory: Annotated[Path, typer.Argument()],
-    output: Annotated[Path, typer.Option("--output")] = Path("data/rawRecord/转文字文档.md"),
+    output: Annotated[Path, typer.Option("--output")] = Path("data/rawRecord/transcript.md"),
     model_directory: Annotated[Path | None, typer.Option("--model-dir")] = None,
     run_local: Annotated[bool, typer.Option("--local/--no-local")] = False,
     run_cloud: Annotated[bool, typer.Option("--cloud/--no-cloud")] = True,

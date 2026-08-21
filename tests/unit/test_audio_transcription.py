@@ -1,6 +1,5 @@
 """Deterministic tests for long-recording transcription invariants."""
 
-# ruff: noqa: RUF001 - Chinese transcript punctuation is part of the assertions.
 
 from __future__ import annotations
 
@@ -83,7 +82,7 @@ def test_reads_real_mvhd_atom_and_ignores_fake_media_bytes(tmp_path: Path) -> No
 def test_inspects_non_mp4_audio_and_reads_filename_clock(tmp_path: Path) -> None:
     import soundfile
 
-    path = tmp_path / "录音机-20260805-1320.wav"
+    path = tmp_path / "recorder-20260805-1320.wav"
     soundfile.write(path, np.zeros(16_000, dtype=np.float32), 16_000)
 
     source = inspect_recording(path, index=1)
@@ -115,33 +114,33 @@ def test_chunk_plan_covers_timeline_and_prefers_nearby_silence() -> None:
 
 def test_overlap_dedup_alignment_and_numeric_conflict() -> None:
     items: list[dict[str, object]] = [
-        {"start_ms": 1_000, "end_ms": 2_000, "text": "预算是 120 元。"},
-        {"start_ms": 1_500, "end_ms": 2_100, "text": "预算是120元"},
-        {"start_ms": 3_000, "end_ms": 4_000, "text": "预算是 210 元。"},
+        {"start_ms": 1_000, "end_ms": 2_000, "text": "Budget is 120 yuan."},
+        {"start_ms": 1_500, "end_ms": 2_100, "text": "Budget is 120 yuan"},
+        {"start_ms": 3_000, "end_ms": 4_000, "text": "Budget is 210 yuan."},
     ]
 
     assert len(deduplicate_overlap(items)) == 2
-    assert text_agreement("你好，世界！", "你好 世界") == 1
-    assert has_sensitive_disagreement("预算 120 元", "预算 210 元")
-    assert not has_sensitive_disagreement("预算 120 元", "共 120 元")
+    assert text_agreement("Hello, world!", "Hello world") == 1
+    assert has_sensitive_disagreement("Budget 120 yuan", "Budget 210 yuan")
+    assert not has_sensitive_disagreement("Budget 120 yuan", "Total 120 yuan")
 
     noisy_overlap: list[dict[str, object]] = [
         {
             "chunk_id": "chunk_1",
             "start_ms": 5_387_470,
             "end_ms": 5_390_230,
-            "text": "你是你你这个东西是空白的。",
+            "text": "This repeated phrase should be blank.",
         },
         {
             "chunk_id": "chunk_2",
             "start_ms": 5_388_560,
             "end_ms": 5_390_080,
-            "text": "你你这个东西是空白的。",
+            "text": "This phrase should be blank.",
         },
     ]
     deduplicated = deduplicate_overlap(noisy_overlap)
     assert len(deduplicated) == 1
-    assert deduplicated[0]["text"] == "你是你你这个东西是空白的。"
+    assert deduplicated[0]["text"] == "This repeated phrase should be blank."
 
 
 def test_vad_ranges_merge_only_with_configured_gap() -> None:
@@ -164,8 +163,8 @@ def test_markdown_uses_absolute_clock_and_compresses_long_silence() -> None:
                 recording_id=source.recording_id,
                 start_ms=12 * 60_000,
                 end_ms=12 * 60_000 + 5_000,
-                speaker="说话人 A",
-                text="嗯，开始吧。",
+                speaker="Speaker A",
+                text="Okay, let's begin.",
                 decision="cloud_agreement",
                 confidence=0.95,
             ),
@@ -174,9 +173,9 @@ def test_markdown_uses_absolute_clock_and_compresses_long_silence() -> None:
 
     markdown = render_markdown(document)
 
-    assert "[08:33:00–08:45:00] [无可辨识语音]" in markdown
-    assert "[08:45:00–08:45:05] 说话人 A：嗯，开始吧。" in markdown
-    assert "[08:45:05–09:03:00] [无可辨识语音]" in markdown
+    assert "[08:33:00–08:45:00] [No recognizable speech]" in markdown
+    assert "[08:45:00–08:45:05] Speaker A: Okay, let's begin." in markdown
+    assert "[08:45:05–09:03:00] [No recognizable speech]" in markdown
     assert format_elapsed(source.duration_ms) == "00:30:00"
 
 
@@ -205,7 +204,7 @@ class _FakeEmbedder:
 
 
 def test_speaker_clustering_is_stable_and_requires_multiple_cross_day_samples() -> None:
-    assert anonymous_speaker_label(26) == "说话人 AA"
+    assert anonymous_speaker_label(26) == "Speaker AA"
     samples = (
         LocalSpeakerSamples("day1|0", "day1", (0, 10), (Path("alice.wav"), Path("a2.wav"))),
         LocalSpeakerSamples("day2|0", "day2", (1, 10), (Path("alice2.wav"), Path("a3.wav"))),
@@ -221,8 +220,8 @@ def test_speaker_clustering_is_stable_and_requires_multiple_cross_day_samples() 
 
     mapping, profiles = resolve_speakers(samples, embedder=embedder)  # type: ignore[arg-type]
 
-    assert mapping["day1|0"] == mapping["day2|0"] == "说话人 A"
-    assert mapping["visitor|0"] == "说话人 B"
+    assert mapping["day1|0"] == mapping["day2|0"] == "Speaker A"
+    assert mapping["visitor|0"] == "Speaker B"
     assert profiles[0].recording_ids == ("day1", "day2")
     assert profiles[0].sample_count == 4
 
@@ -436,8 +435,8 @@ def test_invalid_chunk_and_out_of_bounds_transcript_are_rejected() -> None:
                     recording_id=source.recording_id,
                     start_ms=9_000,
                     end_ms=11_000,
-                    speaker="说话人 ?",
-                    text="[听不清]",
+                    speaker="Speaker ?",
+                    text="[Unclear]",
                     decision="unclear",
                     confidence=0.1,
                 ),

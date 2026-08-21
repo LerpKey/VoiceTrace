@@ -27,6 +27,12 @@ target/
 .env.*
 !.env.example
 *.local
+*.key
+*.pem
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
 
 # Models, recordings, exports and runtime data
 /models/
@@ -47,6 +53,7 @@ data/audio-review/*
 *.flac
 .benchmarks/
 /benchmarks/
+/benchmark/
 
 # Local build artifacts and project-only files
 audio-review-ui/.next/

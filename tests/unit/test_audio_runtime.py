@@ -1,6 +1,5 @@
 """Mocked runtime tests for the resumable audio providers and orchestrator."""
 
-# ruff: noqa: RUF001 - Chinese transcript punctuation is part of the assertions.
 
 from __future__ import annotations
 
@@ -178,7 +177,7 @@ def test_file_provider_upload_poll_parse_and_sanitize(
                     {
                         "begin_time": 10,
                         "end_time": 900,
-                        "text": " 你好 ",
+                        "text": " hello ",
                         "speaker_id": 2,
                     }
                 ]
@@ -197,7 +196,7 @@ def test_file_provider_upload_poll_parse_and_sanitize(
 
     assert result.task_id == "task-1"
     assert result.billed_seconds == 1
-    assert result.sentences[0].text == "你好"
+    assert result.sentences[0].text == "hello"
     assert result.sentences[0].speaker_id == "2"
     assert "file_url" not in result.sanitized_payload
 
@@ -220,7 +219,7 @@ def test_qwen3_file_provider_uses_current_request_and_result_shapes(
             _Response(
                 {
                     "transcripts": [
-                        {"sentences": [{"begin_time": 100, "end_time": 100, "text": "嗯"}]}
+                        {"sentences": [{"begin_time": 100, "end_time": 100, "text": "um"}]}
                     ]
                 }
             ),
@@ -235,7 +234,7 @@ def test_qwen3_file_provider_uses_current_request_and_result_shapes(
         audio,
         model="qwen3-asr-flash-filetrans",
         diarization=True,
-        context_text="不应提交给当前接口",
+        context_text="must not be sent to this endpoint",
     )
 
     submitted = session.post_calls[0][1]["json"]
@@ -291,14 +290,14 @@ def test_flash_provider_success_and_no_words(
             _Response(
                 {
                     "request_id": "r1",
-                    "output": {"output": {"sentence": {"text": "复核文本"}}},
+                    "output": {"output": {"sentence": {"text": "reviewed text"}}},
                 }
             )
         ],
     )
     monkeypatch.setattr(requests, "Session", lambda: success)
     client = providers.DashScopeFlashTranscriber(api_key="key")
-    assert client.transcribe(audio, model=pipeline.THIRD_PASS_MODEL).text == "复核文本"
+    assert client.transcribe(audio, model=pipeline.THIRD_PASS_MODEL).text == "reviewed text"
 
     no_words = _Session(
         gets=[],
@@ -328,7 +327,7 @@ def test_qwen3_flash_provider_uses_audio_content_and_asr_options(
             _Response(
                 {
                     "request_id": "r-qwen3",
-                    "output": {"choices": [{"message": {"content": "当前接口文本"}}]},
+                    "output": {"choices": [{"message": {"content": "endpoint text"}}]},
                 }
             )
         ],
@@ -336,7 +335,7 @@ def test_qwen3_flash_provider_uses_audio_content_and_asr_options(
     monkeypatch.setattr(requests, "Session", lambda: session)
 
     result = providers.DashScopeFlashTranscriber(api_key="key").transcribe(
-        audio, model="qwen3-asr-flash", context_text="不会作为文本消息发送"
+        audio, model="qwen3-asr-flash", context_text="must not be sent as a text message"
     )
 
     submitted = session.post_calls[0][1]["json"]
@@ -345,7 +344,7 @@ def test_qwen3_flash_provider_uses_audio_content_and_asr_options(
     assert len(messages) == 1
     assert set(messages[0]["content"][0]) == {"audio"}
     assert submitted["parameters"] == {"asr_options": {"language": "zh", "enable_itn": False}}
-    assert result.text == "当前接口文本"
+    assert result.text == "endpoint text"
 
 
 def test_local_provider_batches_and_unloads(
@@ -357,12 +356,15 @@ def test_local_provider_batches_and_unloads(
             return cls()
 
         def transcribe(self, **_kwargs: object) -> list[types.SimpleNamespace]:
-            return [types.SimpleNamespace(text=" 本地文本 ")]
+            return [types.SimpleNamespace(text=" local text ")]
 
     monkeypatch.setitem(sys.modules, "qwen_asr", types.SimpleNamespace(Qwen3ASRModel=FakeModel))
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
     client = providers.LocalQwenTranscriber(model_directory=tmp_path, batch_size=1)
     result = client.transcribe([(tmp_path / "clip.wav", 10, 20)])
-    assert result[0].text == "本地文本"
+    assert result[0].text == "local text"
     client.unload()
 
 
@@ -435,14 +437,14 @@ def test_local_only_adjudication_keeps_plain_text_and_local_provenance(tmp_path:
             "recording_id": source.recording_id,
             "start_ms": 1_000,
             "end_ms": 6_000,
-            "text": "本地原话",
+            "text": "local source text",
             "model": pipeline.LOCAL_MODEL_ID,
         }
     ]
     key = f"{source.recording_id}|1000|6000"
-    segments = transcriber._adjudicate_local_only((source,), local, {key: "说话人 A"})
-    assert segments[0].text == "本地原话"
-    assert segments[0].speaker == "说话人 A"
+    segments = transcriber._adjudicate_local_only((source,), local, {key: "Speaker A"})
+    assert segments[0].text == "local source text"
+    assert segments[0].speaker == "Speaker A"
     assert segments[0].flags == ("local_only",)
     assert {candidate.provider for candidate in segments[0].candidates} == {"local"}
 
@@ -456,7 +458,7 @@ def test_sparse_provider_speaker_group_inherits_local_voice_cluster(tmp_path: Pa
             "chunk_id": "speech_1",
             "start_ms": 1_000,
             "end_ms": 2_000,
-            "text": "短句",
+            "text": "short phrase",
             "speaker_id": "0",
             "task_id": "task",
             "model": "fun-asr",
@@ -466,7 +468,7 @@ def test_sparse_provider_speaker_group_inherits_local_voice_cluster(tmp_path: Pa
             "chunk_id": "speech_1",
             "start_ms": 3_000,
             "end_ms": 8_000,
-            "text": "足够长的句子",
+            "text": "a sentence that is long enough",
             "speaker_id": "0",
             "task_id": "task",
             "model": "fun-asr",
@@ -477,22 +479,22 @@ def test_sparse_provider_speaker_group_inherits_local_voice_cluster(tmp_path: Pa
             "recording_id": source.recording_id,
             "start_ms": 1_000,
             "end_ms": 2_000,
-            "text": "短句",
+            "text": "short phrase",
             "cloud_ref": "speech_1:1000:2000",
         },
         {
             "recording_id": source.recording_id,
             "start_ms": 3_000,
             "end_ms": 8_000,
-            "text": "足够长的句子",
+            "text": "a sentence that is long enough",
             "cloud_ref": "speech_1:3000:8000",
         },
     ]
-    mapping = {f"{source.recording_id}|3000|8000": "说话人 A"}
+    mapping = {f"{source.recording_id}|3000|8000": "Speaker A"}
 
     segments = transcriber._adjudicate((source,), cloud, local, {}, mapping)
 
-    assert [segment.speaker for segment in segments] == ["说话人 A", "说话人 A"]
+    assert [segment.speaker for segment in segments] == ["Speaker A", "Speaker A"]
 
 
 def test_local_segment_clustering_requires_cross_day_evidence(tmp_path: Path) -> None:
@@ -571,11 +573,11 @@ def test_local_only_speaker_mapping_writes_and_reuses_cache(
             "recording_id": source.recording_id,
             "start_ms": 1_000,
             "end_ms": 6_000,
-            "text": "本地文本",
+            "text": "local text",
         }
     ]
     profile = SpeakerProfile(
-        speaker="说话人 A",
+        speaker="Speaker A",
         local_speaker_keys=(f"{source.recording_id}|1000|6000",),
         recording_ids=(source.recording_id,),
         sample_count=5,
@@ -589,11 +591,11 @@ def test_local_only_speaker_mapping_writes_and_reuses_cache(
         assert kwargs["embedding_cache_path"] == (
             transcriber.work_directory / "providers" / "local" / "speaker-embeddings.json"
         )
-        return {samples[0].key: "说话人 A"}, (profile,)
+        return {samples[0].key: "Speaker A"}, (profile,)
 
     monkeypatch.setattr(pipeline, "resolve_local_segments", fake_resolve)
     mapping, profiles = transcriber._local_only_speaker_mapping((source,), sentences)
-    assert mapping == {f"{source.recording_id}|1000|6000": "说话人 A"}
+    assert mapping == {f"{source.recording_id}|1000|6000": "Speaker A"}
     assert profiles == (profile,)
 
     monkeypatch.setattr(
@@ -623,7 +625,7 @@ def test_local_speaker_edges_keep_single_identity_and_reject_short_clip(
     mapping, profiles = resolve_local_segments(  # type: ignore[arg-type]
         (sample,), embedder=SingleEmbedder(), minimum_identity_samples=1
     )
-    assert mapping == {"single": "说话人 A"}
+    assert mapping == {"single": "Speaker A"}
     assert profiles[0].sample_count == 1
 
     source = _source(tmp_path, duration_ms=20_000)
@@ -636,7 +638,7 @@ def test_local_speaker_edges_keep_single_identity_and_reject_short_clip(
                 "recording_id": source.recording_id,
                 "start_ms": 1_000,
                 "end_ms": 2_000,
-                "text": "太短",
+                "text": "too short",
             }
         ],
     ) == ({}, ())
@@ -794,7 +796,7 @@ def test_cloud_pass_falls_back_and_deduplicates(
                 model=model,
                 task_id="task",
                 billed_seconds=60,
-                sentences=(ProviderSentence(1_000, 2_000, "云端", "0", "task"),),
+                sentences=(ProviderSentence(1_000, 2_000, "cloud", "0", "task"),),
                 sanitized_payload={},
             )
 
@@ -834,7 +836,7 @@ def test_local_speaker_third_pass_and_adjudication(
             "chunk_id": chunk.chunk_id,
             "start_ms": 1_000,
             "end_ms": 5_000,
-            "text": "预算一百二十元",
+            "text": "Budget is 120 yuan",
             "speaker_id": "0",
             "task_id": "task",
             "model": "fun-asr",
@@ -854,7 +856,7 @@ def test_local_speaker_third_pass_and_adjudication(
             pass
 
         def transcribe(self, clips: list[tuple[Path, int, int]]) -> tuple[ProviderSentence, ...]:
-            return tuple(ProviderSentence(start, end, "预算一百三十元") for _, start, end in clips)
+            return tuple(ProviderSentence(start, end, "Budget is 130 yuan") for _, start, end in clips)
 
         def unload(self) -> None:
             pass
@@ -871,7 +873,7 @@ def test_local_speaker_third_pass_and_adjudication(
             return providers.FlashResult(
                 model=pipeline.THIRD_PASS_MODEL,
                 request_id="third",
-                text="预算一百三十元",
+        text="Budget is 130 yuan",
                 sanitized_payload={},
             )
 
@@ -879,11 +881,11 @@ def test_local_speaker_third_pass_and_adjudication(
     cloud_results: dict[str, CloudResult] = {}
     third = transcriber._third_pass((source,), (chunk,), cloud, local, cloud_results)
     segments = transcriber._adjudicate(
-        (source,), cloud, local, third, {f"{source.recording_id}|{chunk.chunk_id}|0": "说话人 A"}
+        (source,), cloud, local, third, {f"{source.recording_id}|{chunk.chunk_id}|0": "Speaker A"}
     )
-    assert segments[0].text == "预算一百三十元"
+    assert segments[0].text == "Budget is 130 yuan"
     assert segments[0].decision == "third_pass_majority"
-    assert segments[0].speaker == "说话人 A"
+    assert segments[0].speaker == "Speaker A"
 
 
 def test_run_writes_structured_and_markdown_outputs(
@@ -974,6 +976,7 @@ def test_transcriber_validation_sources_and_manifest(
                 tmp_path / "out.md",
                 run_cloud=False,
                 speech_only_cloud=True,
+                run_local=True,
             )
         )
     with pytest.raises(pipeline.RecordingTranscriptionError, match="must not be negative"):
@@ -1082,7 +1085,7 @@ def test_text_review_failure_falls_back_to_original_transcript(
     reviewed = transcriber._review_text(document, {})
 
     assert reviewed == document
-    assert transcriber._text_review_warning == "文本整理已回退：invalid topic coverage"
+    assert transcriber._text_review_warning == "Text review fallback: invalid topic coverage"
 
 
 def test_short_cloud_chunk_and_vad_intervals(
@@ -1111,7 +1114,7 @@ def test_short_cloud_chunk_and_vad_intervals(
 
     class Flash:
         def transcribe(self, *_args: object, **_kwargs: object) -> providers.FlashResult:
-            return providers.FlashResult("short", "request", "文本", {})
+            return providers.FlashResult("short", "request", "text", {})
 
     result = transcriber._short_cloud_chunk(chunk, Flash())  # type: ignore[arg-type]
     assert result.billed_seconds == 360
@@ -1150,7 +1153,7 @@ def test_speaker_mapping_extracts_samples_and_embedder_handles_model(
             "chunk_id": chunk.chunk_id,
             "start_ms": 1_000,
             "end_ms": 6_000,
-            "text": "你好",
+            "text": "hello",
             "speaker_id": "0",
             "task_id": "task",
             "model": "fun-asr",
@@ -1160,7 +1163,7 @@ def test_speaker_mapping_extracts_samples_and_embedder_handles_model(
             "chunk_id": chunk.chunk_id,
             "start_ms": 7_000,
             "end_ms": 12_000,
-            "text": "继续",
+            "text": "continue",
             "speaker_id": "0",
             "task_id": "task",
             "model": "fun-asr",
@@ -1173,7 +1176,7 @@ def test_speaker_mapping_extracts_samples_and_embedder_handles_model(
         lambda _src, dst, **_kwargs: dst.parent.mkdir(parents=True, exist_ok=True) or _wav(dst),
     )
     profile = SpeakerProfile(
-        speaker="说话人 A",
+        speaker="Speaker A",
         local_speaker_keys=("key",),
         recording_ids=(source.recording_id,),
         sample_count=2,
@@ -1182,11 +1185,11 @@ def test_speaker_mapping_extracts_samples_and_embedder_handles_model(
     monkeypatch.setattr(
         pipeline,
         "resolve_speakers",
-        lambda samples, *, embedder: ({samples[0].key: "说话人 A"}, (profile,)),
+        lambda samples, *, embedder: ({samples[0].key: "Speaker A"}, (profile,)),
     )
     transcriber = pipeline.RecordingTranscriber(_options(tmp_path), api_key="key")
     mapping, profiles = transcriber._speaker_mapping((source,), (chunk,), cloud)
-    assert next(iter(mapping.values())) == "说话人 A"
+    assert next(iter(mapping.values())) == "Speaker A"
     assert profiles == (profile,)
 
     monkeypatch.setattr(
@@ -1202,13 +1205,20 @@ def test_speaker_mapping_extracts_samples_and_embedder_handles_model(
 
             return [{"spk_embedding": torch.tensor([[3.0, 4.0]])}]
 
+    speaker_kwargs: dict[str, object] = {}
+
+    def fake_auto_model(**kwargs: object) -> FakeSpeakerModel:
+        speaker_kwargs.update(kwargs)
+        return FakeSpeakerModel()
+
     monkeypatch.setitem(
         sys.modules,
         "funasr",
-        types.SimpleNamespace(AutoModel=lambda **_kwargs: FakeSpeakerModel()),
+        types.SimpleNamespace(AutoModel=fake_auto_model),
     )
     vector = SpeakerEmbedder(model_directory=tmp_path).embed((audio,))
     assert vector.tolist() == pytest.approx([0.6, 0.8])
+    assert speaker_kwargs["device"] == "cpu"
 
 
 def test_adjudication_unclear_missing_and_hallucination_suppression(tmp_path: Path) -> None:
@@ -1219,7 +1229,7 @@ def test_adjudication_unclear_missing_and_hallucination_suppression(tmp_path: Pa
         "chunk_id": "chunk",
         "start_ms": 1_000,
         "end_ms": 2_000,
-        "text": "云端文本",
+        "text": "cloud transcript",
         "speaker_id": None,
         "task_id": "task",
         "model": "fun-asr",
@@ -1230,14 +1240,14 @@ def test_adjudication_unclear_missing_and_hallucination_suppression(tmp_path: Pa
             "recording_id": source.recording_id,
             "start_ms": 1_000,
             "end_ms": 2_000,
-            "text": "本地完全不同",
+        "text": "local transcript differs",
             "model": pipeline.LOCAL_MODEL_ID,
             "cloud_ref": ref,
         }
     ]
     unclear = transcriber._adjudicate((source,), [base], local, {}, {})
     assert unclear[0].decision == "unclear"
-    assert unclear[0].text.startswith("[疑似：")
+    assert unclear[0].text.startswith("[Uncertain:")
     missing = transcriber._adjudicate((source,), [base], [], {}, {})
     assert missing[0].decision == "cloud_primary"
     empty_local = [{**local[0], "text": ""}]
@@ -1252,15 +1262,15 @@ def test_adjudication_includes_uncertain_vad_supplement(tmp_path: Path) -> None:
             "recording_id": source.recording_id,
             "start_ms": 3_000,
             "end_ms": 5_000,
-            "text": "本地补漏文本",
+        "text": "local supplemental text",
             "model": pipeline.LOCAL_MODEL_ID,
             "cloud_ref": None,
         }
     ]
     segments = transcriber._adjudicate((source,), [], local, {}, {})
     assert len(segments) == 1
-    assert segments[0].speaker == "说话人（未确认）"
-    assert segments[0].text == "[疑似：本地补漏文本]"
+    assert segments[0].speaker == "Speaker (unconfirmed)"
+    assert segments[0].text == "[Uncertain: local supplemental text]"
     assert segments[0].decision == "local_primary"
     assert "vad_supplement" in segments[0].flags
 
@@ -1286,7 +1296,7 @@ def test_speaker_mapping_assigns_letter_to_short_unresolved_voice(
             "chunk_id": chunk.chunk_id,
             "start_ms": 1_000,
             "end_ms": 2_000,
-            "text": "短句",
+            "text": "short phrase",
             "speaker_id": "7",
             "task_id": "task",
             "model": "fun-asr",
@@ -1296,7 +1306,7 @@ def test_speaker_mapping_assigns_letter_to_short_unresolved_voice(
     transcriber = pipeline.RecordingTranscriber(_options(tmp_path), api_key="key")
     mapping, profiles = transcriber._speaker_mapping((source,), (chunk,), cloud)
     key = f"{source.recording_id}|{chunk.chunk_id}|7"
-    assert mapping[key] == "说话人 A"
+    assert mapping[key] == "Speaker A"
     assert profiles[0].confidence == 0.25
     assert profiles[0].sample_count == 0
 
@@ -1353,7 +1363,7 @@ def test_provider_validation_and_error_responses(
     monkeypatch.setattr(requests, "Session", lambda: failure)
     with pytest.raises(providers.TranscriptionProviderError, match="short ASR failed"):
         providers.DashScopeFlashTranscriber(api_key="key").transcribe(
-            audio, model=pipeline.THIRD_PASS_MODEL, context_text="上下文"
+            audio, model=pipeline.THIRD_PASS_MODEL, context_text="context"
         )
 
     too_large = tmp_path / "large.flac"
@@ -1581,7 +1591,7 @@ def test_cloud_pass_uses_short_model_after_both_file_models_fail(
             pass
 
         def transcribe(self, *_args: object, **_kwargs: object) -> providers.FlashResult:
-            return providers.FlashResult(pipeline.SHORT_CLOUD_MODEL, "request", "短模型", {})
+            return providers.FlashResult(pipeline.SHORT_CLOUD_MODEL, "request", "short model", {})
 
     monkeypatch.setattr(pipeline, "DashScopeFileTranscriber", FailedFile)
     monkeypatch.setattr(pipeline, "DashScopeFlashTranscriber", WorkingFlash)
@@ -1596,7 +1606,7 @@ def test_cloud_pass_uses_short_model_after_both_file_models_fail(
     model, results, sentences = transcriber._cloud_pass((chunk,))
     assert model == pipeline.SHORT_CLOUD_MODEL
     assert results["pilot"].model == pipeline.SHORT_CLOUD_MODEL
-    assert sentences[0]["text"] == "短模型"
+    assert sentences[0]["text"] == "short model"
 
 
 def test_explicit_audio_model_directory_overrides_default(tmp_path: Path) -> None:

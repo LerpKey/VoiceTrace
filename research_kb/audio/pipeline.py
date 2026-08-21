@@ -1,6 +1,5 @@
 """Resumable orchestration for dual-track long-recording transcription."""
 
-# ruff: noqa: RUF001 - Chinese ASR context and uncertainty markers are intentional.
 
 from __future__ import annotations
 
@@ -91,7 +90,8 @@ class TranscriptionOptions:
     source_directory: Path
     output_path: Path
     model_directory: Path | None = None
-    run_local: bool = True
+    # Cloud ASR is the default quality path. Local Qwen3-ASR remains opt-in.
+    run_local: bool = False
     run_cloud: bool = True
     allow_cloud_upload: bool = False
     resume: bool = True
@@ -122,7 +122,7 @@ def _ensure_model(model_id: str, directory: Path) -> Path:
         modelscope.snapshot_download(model_id, local_dir=str(target))
         marker.touch()
         return target
-    except Exception as modelscope_error:
+    except Exception as modelscope_error:  # noqa: BLE001 - third-party download errors vary
         os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
         os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
         try:
@@ -131,7 +131,7 @@ def _ensure_model(model_id: str, directory: Path) -> Path:
             huggingface_download(repo_id=model_id, local_dir=target)
             marker.touch()
             return target
-        except Exception as huggingface_error:
+        except Exception as huggingface_error:  # noqa: BLE001 - third-party errors vary
             raise RecordingTranscriptionError(
                 f"could not download local model {model_id}"
             ) from ExceptionGroup("model download failures", [modelscope_error, huggingface_error])
@@ -302,7 +302,7 @@ class RecordingTranscriber:
         self.manifest_path = self.work_directory / "processing_manifest.json"
         self.transcript_path = self.work_directory / "transcript.json"
         self.text_analysis_path = self.work_directory / "text_analysis.json"
-        self.topic_index_path = self.output_path.with_name(f"{self.output_path.stem}_话题索引.md")
+        self.topic_index_path = self.output_path.with_name("topic-index.md")
         self.api_key = api_key
         self.deepseek_api_key = deepseek_api_key
         self.deepseek_base_url = deepseek_base_url
@@ -507,7 +507,7 @@ class RecordingTranscriber:
                 created = ProcessingManifest.model_validate_json(
                     self.manifest_path.read_bytes()
                 ).created_at
-            except Exception:
+            except Exception:  # noqa: BLE001 - corrupt legacy manifests fall back safely
                 created = now
         billed = _unique_billed_seconds(cloud_results)
         text_usage = self._text_analysis.usage if self._text_analysis else ()
@@ -623,7 +623,7 @@ class RecordingTranscriber:
                             chunk_path,
                             model=model,
                             diarization=not model.startswith("qwen3-asr"),
-                            context_text="中文办公室工作录音，可能包含电话、通勤噪声和少量英语术语。逐句忠实转写。",
+                            context_text="Office recording in the source language. It may contain phone calls, commute noise, and a few English terms. Transcribe faithfully sentence by sentence; do not translate.",
                         )
                     except TranscriptionProviderError as primary_error:
                         if index != 0 or historical_pilot is not None:
@@ -697,7 +697,7 @@ class RecordingTranscriber:
             result = provider.transcribe(
                 clip,
                 model=SHORT_CLOUD_MODEL,
-                context_text="中文办公室工作录音，逐字忠实转写，保留口头语和数字。",
+                context_text="Office recording in the source language. Transcribe faithfully, keep spoken language and numbers, and do not translate.",
             )
             request_ids.append(result.request_id)
             payloads.append(result.sanitized_payload)
@@ -1220,7 +1220,7 @@ class RecordingTranscriber:
                             clip_path,
                             model=THIRD_PASS_MODEL,
                             context_text=(
-                                f"办公室录音复核。候选一：{cloud_text}；候选二：{local_text}"
+                                f"Review the office recording in its source language. Candidate one: {cloud_text}; candidate two: {local_text}. Do not translate."
                             ),
                         )
                         break
@@ -1352,7 +1352,7 @@ class RecordingTranscriber:
                 else:
                     decision = "unclear"
                     confidence = max(0.3, min(0.49, agreement))
-                    emitted_text = f"[疑似：{cloud_text}]" if cloud_text else "[听不清]"
+                    emitted_text = f"[Uncertain: {cloud_text}]" if cloud_text else "[Unclear]"
                     flags = ("models_disagree", "no_majority") + (
                         ("sensitive_difference",) if sensitive else ()
                     )
@@ -1406,7 +1406,7 @@ class RecordingTranscriber:
                     )
                     or ""
                 )
-            speaker = speaker or "说话人（未确认）"
+            speaker = speaker or "Speaker (unconfirmed)"
             candidates = [
                 ProviderCandidate(
                     provider="cloud",
@@ -1465,8 +1465,8 @@ class RecordingTranscriber:
             end_ms = _evidence_int(local, "end_ms")
             recording_id = str(local["recording_id"])
             resolved_speaker = _speaker_for_range(speaker_mapping, recording_id, start_ms, end_ms)
-            speaker = resolved_speaker or "说话人（未确认）"
-            speaker_flags = () if speaker != "说话人（未确认）" else ("speaker_unconfirmed",)
+            speaker = resolved_speaker or "Speaker (unconfirmed)"
+            speaker_flags = () if speaker != "Speaker (unconfirmed)" else ("speaker_unconfirmed",)
             segments.append(
                 TranscriptSegment(
                     segment_id="local_supplement",
@@ -1474,7 +1474,7 @@ class RecordingTranscriber:
                     start_ms=start_ms,
                     end_ms=end_ms,
                     speaker=speaker,
-                    text=f"[疑似：{local_text}]",
+                    text=f"[Uncertain: {local_text}]",
                     decision="local_primary",
                     confidence=0.4,
                     flags=("local_only", "vad_supplement", *speaker_flags),
@@ -1526,9 +1526,9 @@ class RecordingTranscriber:
             start_ms = _evidence_int(local, "start_ms")
             end_ms = _evidence_int(local, "end_ms")
             speaker = _speaker_for_range(speaker_mapping, recording_id, start_ms, end_ms)
-            speaker = speaker or "说话人（未确认）"
+            speaker = speaker or "Speaker (unconfirmed)"
             flags = ("local_only",) + (
-                ("speaker_unconfirmed",) if speaker == "说话人（未确认）" else ()
+                ("speaker_unconfirmed",) if speaker == "Speaker (unconfirmed)" else ()
             )
             segments.append(
                 TranscriptSegment(
@@ -1570,7 +1570,7 @@ class RecordingTranscriber:
         remaining = self.options.cost_cap_cny - asr_cost
         review_cap = min(self.options.deepseek_cost_cap_cny, remaining)
         if review_cap <= 0:
-            self._text_review_warning = "文本整理已回退：总费用预算不足"
+            self._text_review_warning = "Text review fallback: total cost budget is insufficient"
             return document
         reviewer = DeepSeekTranscriptReviewer(
             api_key=self.deepseek_api_key,
@@ -1586,13 +1586,13 @@ class RecordingTranscriber:
         try:
             reviewed, analysis = reviewer.review(document)
         except TranscriptTextReviewError as error:
-            self._text_review_warning = f"文本整理已回退：{error}"
+            self._text_review_warning = f"Text review fallback: {error}"
             return document
         if asr_cost + analysis.estimated_cost_cny > self.options.cost_cap_cny:
-            self._text_review_warning = "文本整理已回退：ASR 与文本整理合计费用超过上限"
+            self._text_review_warning = "Text review fallback: combined ASR and text review cost exceeds the cap"
             return document
         self._text_review_warning = (
-            f"文本整理已完成: {analysis.window_fallback_count} 个窗口因费用上限保留原始识别"
+            f"Text review complete: {analysis.window_fallback_count} windows kept the original recognition because of the cost cap"
             if analysis.window_fallback_count
             else None
         )
@@ -1683,12 +1683,12 @@ class RecordingTranscriber:
                 completed_steps=tuple(completed_steps_list),
             )
             base_title = (
-                Path(sources[0].filename).stem + " 录音转文字"
+                Path(sources[0].filename).stem + " recording transcript"
                 if len(sources) == 1
-                else "多日办公室录音转文字"
+                else "Multi-day office recording transcript"
             )
             document = TranscriptDocument(
-                title=(base_title + "（仅本地）" if not self.options.run_cloud else base_title),
+                title=(base_title + " (local only)" if not self.options.run_cloud else base_title),
                 generated_at=datetime.now(UTC),
                 sources=sources,
                 speakers=profiles,

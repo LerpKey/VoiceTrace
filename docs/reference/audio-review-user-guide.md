@@ -1,255 +1,227 @@
-# 语迹 VoiceTrace 录音审阅工作台使用手册
+# VoiceTrace Audio Review User Guide
 
-## 1. 发布状态
+[English](audio-review-user-guide.md) · [Chinese](audio-review-user-guide.zh-CN.md)
 
-当前版本 `0.1.0` 适合作为 **Windows 本机个人开发版** 使用和测试。
+## 1. Release status
 
-| 使用场景 | 结论 | 原因 |
+Version `0.1.0` is suitable for personal development use and testing on a Windows machine.
+
+| Use case | Result | Reason |
 |---|---|---|
-| 当前电脑、本机个人使用 | 可以 | 播放、转写阅读、话题导航、说话人显示名、收藏、备注和日志均已实现 |
-| 同一局域网多人使用 | 暂不支持 | 服务只监听本机地址，没有多人账号和并发编辑设计 |
-| 公开互联网部署 | 不可以直接发布 | 音频与状态保存在本机，尚无登录权限、远程音频存储和服务器端隐私隔离 |
+| Personal use on the current machine | Supported | Playback, transcript reading, topic navigation, speaker display names, favorites, notes, and logs are implemented |
+| Multiple people on the same LAN | Not supported | The service listens on the local machine only and has no account or concurrent-editing design |
+| Public internet deployment | Do not publish directly | Audio and state remain local; authentication, remote storage, and server-side privacy isolation are not implemented |
 
-本手册中的“发布”均指本机版交付，不代表把私密录音上传到公网。
+In this guide, “release” means delivery of the local application. It does not mean publishing private recordings to the internet.
 
-## 2. 软件用途
+## 2. Purpose
 
-语迹的录音审阅工作台用于：
+The recording review workspace is intended to:
 
-- 播放数小时的长录音并快速定位；
-- 将转写句子与原声进行比对；
-- 按实际钟表时间和录音内时间浏览；
-- 查看完整话题脉络；
-- 为整份录音统一设置说话人显示名；
-- 收藏重要句子、集中查看并添加备注；
-- 添加新录音并启动转写。
+- play long recordings and jump to relevant moments;
+- compare transcript sentences with the original audio;
+- browse by wall-clock time and recording-relative time;
+- review the complete topic flow;
+- set a consistent display name for a speaker across a recording;
+- favorite important sentences and add notes in one place;
+- add recordings and start transcription.
 
-工作台不是自动定稿工具。对于标为 `[疑似：…]`、`[听不清]` 或多人同时说话的内容，
-应点击句子回听原声后再用于正式文件。
+The workspace is not an automatic finalization tool. For passages marked `[Uncertain: …]`, `[Unclear]`, or containing overlapping speech, replay the original audio before using the text in a formal document.
 
-## 3. 启动和关闭
+## 3. Start and stop
 
-### 3.1 日常启动
+### 3.1 Daily start
 
-最简单的启动方式：在项目根目录双击 `启动录音文本工作台.bat`。脚本会启动本机服务，并
-自动打开 `http://localhost:3000/`。工作台已经运行时再次双击，只会重新打开页面，
-不会重复启动服务。
+The simplest start method is to double-click `start-voicetrace-workspace.bat` in the project root. The launcher starts the local service and opens `http://localhost:3000/`. If the workspace is already running, it only opens the page again.
 
-启动窗口需要在使用期间保持打开；关闭工作台时回到该窗口按 `Ctrl+C`。
+Keep the launcher window open while using the workspace. Press `Ctrl+C` in that window to stop it.
 
-也可以在项目目录打开 PowerShell 手动启动：
+To start it manually from PowerShell:
 
 ```powershell
-cd "项目根目录"
+cd "project root"
 uv run voice-trace audio-review --data-dir data
 ```
 
-程序会启动本机服务并打开：
+The service opens:
 
 ```text
 http://localhost:3000/
 ```
 
-`--open-browser` 是默认行为；下面的 `--no-open-browser` 用于只启动服务。
-
-如果不希望自动打开浏览器：
+`--open-browser` is enabled by default. Use `--no-open-browser` to start the service without opening a browser:
 
 ```powershell
 uv run voice-trace audio-review --data-dir data --no-open-browser
 ```
 
-如果前端目录不在默认位置，可显式指定：
+If the frontend is in another directory:
 
 ```powershell
 uv run voice-trace audio-review --data-dir data `
   --frontend-dir audio-review-ui
 ```
 
-实时参数说明可运行 `uv run voice-trace audio-review --help`。
+Run `uv run voice-trace audio-review --help` for the current options.
 
-### 3.2 首次安装或更换电脑
+### 3.2 First install or a new machine
 
-项目使用 Python 3.12 和 uv。首次使用先执行：
+The project uses Python 3.12 and uv:
 
 ```powershell
 uv sync
 ```
 
-前端依赖缺失时，在 `audio-review-ui` 目录按 `package-lock.json` 安装：
+Install the frontend from its lockfile:
 
 ```powershell
-cd "项目根目录\audio-review-ui"
-npm install
+cd "project root\audio-review-ui"
+npm ci
 ```
 
-不要同时混用 npm 和 pnpm 管理该目录，否则可能导致开发服务空白或依赖路径异常。
+Do not mix npm and pnpm in the same frontend directory.
 
-### 3.3 关闭
+### 3.3 Stop
 
-回到启动程序的 PowerShell 窗口，按 `Ctrl+C`。正常关闭会同时停止本机页面和接口。
+Return to the PowerShell window that started the application and press `Ctrl+C`. This stops the local page and API together.
 
-## 4. 工作台布局
+## 4. Workspace layout
 
-页面分为三块：
+The page has three main areas:
 
-1. 左上：播放器、实际时间、录音内进度和全天时间轴；
-2. 左下：当前约 30 分钟窗口内的转写正文；
-3. 右侧：尚未生成时只显示“总结”入口；完成总结后显示按提示词筛选出的内容，也可以切换到当前录音的收藏与永久日志。
+1. Top left: player, wall-clock time, recording-relative progress, and the full-day timeline;
+2. Bottom left: the transcript for the current 30-minute window;
+3. Right: the Summary view, or the current recording's favorites and permanent activity log.
 
-顶部用于打开录音库、管理录音、打开收藏汇总和添加新录音。录音库按月份分栏，月份内按
-当前显示名称排序，可按当前名称或原始文件名搜索。
+The top bar opens the recording library, recording manager, favorites summary, and upload panel. The recording library is grouped by month and sorted by current display name. Search matches the current name and original filename.
 
-## 5. 播放与定位
+Use the language selector in the top bar or favorites page to switch between English and Chinese. The choice is stored in browser `localStorage` and is shared by both pages and tabs.
 
-### 5.1 基本操作
+## 5. Playback and navigation
 
-- 点击播放按钮开始或暂停；
-- 使用 `−10`、`+10` 前后跳转十秒；
-- 选择 0.75、1、1.25、1.5 或 2 倍速；
-- 点击全天时间轴任意位置跳到对应时刻；
-- 点击正文句子直接跳到该句原声；
-- 当前播放句子会自动高亮。
+### 5.1 Basic controls
 
-### 5.2 键盘快捷键
+- Play or pause with the player button;
+- Use `−10` and `+10` to seek by ten seconds;
+- Choose 0.75×, 1×, 1.25×, 1.5×, or 2× playback speed;
+- Click anywhere on the full-day timeline to seek;
+- Click a transcript sentence to play its original audio;
+- The sentence at the current playback position is highlighted automatically.
 
-| 按键 | 行为 |
+### 5.2 Keyboard shortcuts
+
+| Key | Action |
 |---|---|
-| 空格 | 播放或暂停 |
-| 左方向键 | 后退 5 秒 |
-| 右方向键 | 前进 5 秒 |
-| `Shift` + 左方向键 | 后退 30 秒 |
-| `Shift` + 右方向键 | 前进 30 秒 |
+| Space | Play or pause |
+| Left arrow | Seek back 5 seconds |
+| Right arrow | Seek forward 5 seconds |
+| `Shift` + Left arrow | Seek back 30 seconds |
+| `Shift` + Right arrow | Seek forward 30 seconds |
 
-在名称、搜索框或备注框中输入文字时，快捷键不会抢占输入。
+Shortcuts do not take over while typing in a name, search field, or note.
 
-### 5.3 自动跟随
+### 5.3 Follow playback
 
-播放时当前句会自动滚动到正文中央。手动滚动正文后，自动跟随会暂停；点击“回到播放位置”
-恢复跟随。
+While playing, the current sentence scrolls to the center of the transcript. Manual scrolling pauses this behavior. Click `Return to playback` to resume following.
 
-## 6. 时间显示与校准
+## 6. Time display and calibration
 
-每段正文同时显示：
+Each transcript block shows:
 
-- **实际时间**：根据当天录音开始时间推算；
-- **录音内时间**：从文件开头计算的相对时间。
+- **Actual**: the wall-clock time calculated from the recording start time;
+- **In recording**: the relative offset from the start of the file.
 
-如果录音被剪辑过或文件时间不可靠：
+If the recording was edited or its file time is unreliable:
 
-1. 点击“校准开始时间”；
-2. 输入正确的日期和开始时刻；
-3. 点击“保存校准”。
+1. Click `Calibrate start time`;
+2. Enter the correct date and start time;
+3. Click `Save calibration`.
 
-校准只改变界面上的钟表时间换算，不修改音频、时长或原始转写。需要撤销时点击
-“恢复文件时间”。
+Calibration changes only the wall-clock conversion. It does not change the audio, duration, or original transcript. Click `Restore file time` to undo it.
 
-## 7. 阅读转写和话题
+## 7. Transcript and topics
 
-### 7.1 转写正文
+### 7.1 Transcript
 
-正文按连续语义合并显示，不是一句一段。每句仍保留独立时间锚点和说话人标签。
-正文顶部的灰色说明和灰色底表示“疑似段落”：这类内容可能存在识别不确定性，
-建议点击句子回听原音确认。
+The transcript merges adjacent sentences with continuous meaning while keeping independent time anchors and speaker labels. The gray background marks uncertain passages; replay the original audio to verify them.
 
-点击“查看原始识别与模型候选”可以对照原始识别结果。默认整理文本只改善标点、断句和
-高把握错字，不应把 `[疑似]` 当作已经确认。
+`View original recognition and model candidates` exposes the raw recognition candidates. The reviewed text is intended to improve punctuation, sentence breaks, and high-confidence errors only. It must not turn an `[Uncertain: …]` passage into confirmed evidence.
 
-### 7.2 按要求生成总结
-总结、提示词库、进度条、失败原因和重试说明见本手册第 7 节和第 13 节。
+### 7.2 Summary
 
-## 8. 管理说话人
+The Summary view uses a prompt to select and organize topics from the complete transcript. Prompt templates are written in English and explicitly tell the model to keep the source language of the recording and transcript; user-provided prompts may request another scope, but the audio content is not silently translated.
 
-1. 选择一份录音；
-2. 点击“管理说话人”；
-3. 在某个原始标签旁填写希望显示的名称；
-4. 点击“保存”。
+The prompt library, progress bar, failure reasons, retry behavior, and export actions are available from the right panel. Summary generation does not overwrite the original transcript.
 
-修改会作用于当前整份录音中的同一原始标签。多个原始标签可以显示成同一个名字；点击
-“恢复”可回到原标签。
+## 8. Manage speakers
 
-此功能只修改显示层，不改变声纹聚类和 `transcript.json`。如果原始分离把两个人误判成
-同一个标签，仅改名不能重新分离他们。
+1. Select a recording;
+2. Click `Manage speakers`;
+3. Enter the desired display name beside an original speaker label;
+4. Click `Save`.
 
-## 9. 收藏、汇总与备注
+The change applies to that original label throughout the recording. Multiple original labels may share a display name. Click `Restore` to return to the original label.
 
-### 9.1 收藏句子
+This changes the display layer only; it does not change speaker clustering or `transcript.json`. If two people were incorrectly grouped under one label, renaming cannot separate them.
 
-点击句子右侧的 `☆`，变成 `★` 后即为收藏。收藏句子会黄色高亮，并出现在当前录音右栏。
-再次点击可取消收藏；操作历史仍会保留。
+## 9. Favorites, summary, and notes
 
-### 9.2 收藏汇总
+### 9.1 Favorite a sentence
 
-点击顶部“收藏汇总”，会在新标签页打开所有录音的收藏：
+Click `☆` beside a sentence. It becomes `★`, receives a yellow highlight, and appears in the current recording's right panel. Click it again to remove the favorite. The activity log remains append-only.
+
+### 9.2 Favorites summary
+
+Click `Favorites summary` to open all recordings' favorites in a new tab:
 
 ```text
 http://localhost:3000/favorites
 ```
 
-汇总页按录音分组，可搜索录音名、说话人、句子正文和备注。工作台星标变化后会立即通知
-汇总页；切回页面、页面重新可见、每 5 秒或点击“刷新收藏”也会同步。
+The page groups favorites by recording and searches recording names, speakers, sentence text, and notes. The workspace notifies the summary page immediately after a star change. The page also refreshes when it becomes visible, receives focus, every five seconds, or when `Refresh favorites` is clicked.
 
-### 9.3 添加备注
+### 9.3 Add a note
 
-1. 点击收藏右侧的备注框；
-2. 输入最多 2000 字；
-3. 点击“保存备注”。
+1. Click the note area beside a favorite;
+2. Enter up to 2,000 characters;
+3. Click `Save note`.
 
-备注超过显示框时会省略，鼠标悬停可查看完整文本；触屏设备可点击进入编辑查看全文。
-备注修改和清空都会写入永久日志。取消收藏后，当前备注随收藏记录移除，但日志仍保留。
+Long notes are ellipsized in the preview. Hover to read the full note, or open it on a touch device. Note changes and clearing are written to the permanent log. Removing a favorite removes the current note from the favorite record, but not from the log.
 
-## 10. 录音名称管理
+## 10. Manage recording names
 
-当前录音名称显示在播放器左上方。单击名称即可直接修改；按 `Enter` 或点击输入框外保存，
-按 `Esc` 取消本次修改。这里只改变工作台显示名，不会重命名原始音频文件。
+The current recording name appears above the player. Click it to edit, then press `Enter` or click outside to save; press `Escape` to cancel. This changes the workspace display name only and never renames the original audio file.
 
-点击顶部“管理录音”后可以：
+`Manage recordings` can search by display name or original filename, save a display name, restore the original name, hide a recording, and restore a hidden recording. Hiding is reversible and does not delete audio or transcripts.
 
-- 按显示名或原始文件名搜索；
-- 修改工作台显示名；
-- 恢复原始名称；
-- 从工作台移除；
-- 恢复已经移除的录音。
+## 11. Add a recording
 
-“从工作台移除”是可恢复隐藏，不会删除原始音频或转写。
+1. Click `＋ Add recording`;
+2. Choose M4A, MP3, WAV, or FLAC, up to 2 GB per file;
+3. Keep `Low-cost cloud enhancement` enabled for the default speech-only cloud path, or turn it off for local-only processing;
+4. Choose the file and start transcription.
 
-## 11. 添加新录音
+Cloud enhancement means that only VAD-selected speech intervals are uploaded to the configured recognition service. The hard cap is ¥3 per task. Do not enable it for recordings containing private, meeting, or personal information without explicit authorization.
 
-1. 点击“＋ 添加录音”；
-2. 选择 M4A、MP3、WAV 或 FLAC，单文件最大 2 GB；
-3. 默认使用“低成本云端增强（仅上传语音区间）”；如需纯本地处理，可主动关闭；
-4. 选择文件并开始转写。
+The first formal speech chunk is also used for cloud model selection; no separate probe recording is uploaded. When an old task is resumed, an existing `pilot.json` counts as historical usage and is not requested again. The cost ledger deduplicates provider task IDs. ASR prices are estimates based on the provider's published list price; credits, promotions, and the final bill are controlled by the provider console.
 
-默认开启云端增强，但只代表授权经过 VAD 筛选的语音区间上传到已配置的云端识别服务，
-单任务费用硬上限为 3 元。包含隐私、会议或个人信息的录音，在没有明确授权时不要勾选。
+Tasks use file hashes and manifests for checkpointed execution. Multiple recordings run one at a time. Temporary failures retry up to three times, and unfinished tasks resume after a service restart. Matching files and cloud settings reuse successful caches. Configuration errors are shown directly; a DeepSeek failure keeps the ASR transcript. A completed task can repair text review without re-uploading audio. If the text sub-budget is exhausted, keep the original text or add budget within the task cap. When a task cannot continue automatically, the task card provides stage-specific continue and cancel choices.
 
-云端转写的首个正式语音分片会同时用于模型选择，不会另行上传一段“探测音频”。恢复旧任务
-时，已有 `pilot.json` 只计入历史用量，不会重复请求；费用清单按服务商任务 ID 去重。ASR
-单价是当前模块的官方原价估算，活动优惠、免费额度和最终账单以服务商控制台为准。
+`Clear cache and start over` removes only the current task's transcription directory, model cache, and manifest. It keeps the uploaded original audio. Existing cloud charges are not reversed, and new external cost remains subject to the task cap. If the original audio is damaged, restarting reports the same file error.
 
-任务使用文件哈希和处理清单断点续跑；多个录音按队列逐个执行，临时故障最多自动续跑 3 次，服务重启也会恢复未完成任务。相同文件和云端设置复用缓存，不重复完成或计费成功阶段。
-配置错误直接显示原因；DeepSeek 失败先保留 ASR 原文。已完成任务可选“仅修复文本整理”，复用 ASR 和文本缓存且不重新上传音频；文本子预算用尽时可保留原文，或在总上限内由用户选择追加预算完成剩余窗口。其他任务无法自动继续时，任务卡提供受阶段约束的继续或取消建议。如果怀疑断点结果或派生缓存本身已经损坏，可选择“清理缓存并从头开始”。该操作只删除当前任务的转写目录、模型缓存和处理清单，保留上传的原始录音；已产生的云端费用不会被撤销，新的外部费用仍受任务上限约束。如果原录音本身损坏，从头开始仍会报告同一文件错误。
+After upload, the selected local/cloud ASR path runs. Enabling cloud enhancement with initial text review also runs one initial DeepSeek text-review request. Clicking `Summary` later creates a separate DeepSeek summary request. Re-running a summary writes `summary_result.json` and `topic-index.md`; it does not overwrite `text_analysis.json` or `transcript.json`, and it does not change the transcription job's completed stages.
 
-录音上传后按选择执行本地/云端 ASR；勾选“使用云端增强并初次文本整理”时会一并执行一次初次 DeepSeek 文本整理。初次整理完成后，在右栏点击“总结”并输入要求，才会产生一次独立的 DeepSeek 总结请求；如果需要更换整理方式，可以点击“重新总结”再次提交。重新总结只写入 `summary_result.json` 和 `总结_话题索引.md`，不会覆盖 `text_analysis.json`、`transcript.json`，也不会修改转写任务的完成阶段。录音进入队列后，“转写任务”区域每 2 秒自动更新并在刷新页面后继续显示，包含当前阶段、
-完成比例、DeepSeek 输入/输出 Token、Token 费用、云端 ASR 计费秒数、ASR 费用及总费用。
-云端 ASR 按有效音频时长计费，不消耗文本 Token；未启用云端增强时 ASR 和 DeepSeek 费用均为
-0。自动续跑时任务卡会显示续跑次数、重启恢复次数和已复用阶段数；处理中显示的是根据服务商
-返回用量计算的估算值，最终以任务完成后的处理清单为准。
+The `Transcription jobs` panel refreshes every two seconds and persists across page refreshes. It shows the current stage, completion percentage, DeepSeek input/output tokens and cost, cloud ASR billed seconds and cost, and estimated total cost. ASR is billed by effective audio duration and does not consume text tokens. When cloud enhancement is disabled, ASR and DeepSeek cost are both ¥0. In-progress values are estimates from provider usage; the completed manifest is authoritative.
 
-建议继续前会说明恢复策略和最多可能增加的外部费用。源录音缺失、损坏、显存或磁盘不足时不会提供无效的继续按钮。
-正在等待或处理的任务可点“取消转写”；取消会停止工作台管理的本地进程，但已经提交到云端的
-用量仍可能计费。失败、完成或已取消的任务可点“移除记录”，该操作只把任务卡片持久隐藏，
-不会删除上传录音、任务清单或已有转写产物。
-若之后重新上传同一文件，已经“移除记录”的失败任务不会再拦截新任务；程序会创建新的任务目录，从头检查和处理。未移除的失败任务仍可按哈希复用其断点。
-若错误为 `speech-only cloud mode requires cloud ASR`，说明当前任务没有启用云端 ASR。
-“只上传语音区间到云端”会在本地使用 VAD 和说话人模型做区间筛选与身份关联，
-不会因为关闭本地 Qwen3-ASR 而失效。
+The task card explains the recovery strategy and maximum additional external cost before a continue action. Missing, damaged, or resource-constrained recordings do not receive an unsafe continue button. Queued or running tasks can be cancelled; submitted cloud usage may still be billed. Failed, completed, and cancelled tasks can be removed from the list without deleting the upload, manifest, or existing transcript artifacts.
 
-## 12. 数据、安全与备份
+If a removed failed task is uploaded again, it will not block the new task. An unremoved failed task can still reuse its checkpoint by file hash. The error `speech-only cloud mode requires cloud ASR` means the task does not have cloud ASR enabled. Speech-only cloud mode uses local VAD and speaker models for interval selection and speaker association; it does not depend on local Qwen3-ASR.
 
-工作台只监听本机地址，页面和音频不会主动提供给局域网或公网。原始音频和原始转写不会
-因为改名、说话人显示名、时间校准、收藏或备注而被覆盖。
+## 12. Data, security, and backup
 
-人工状态位于：
+The workspace listens on the local machine only. It does not intentionally expose the page or audio to the LAN or public internet. Original audio and raw transcripts are not overwritten by renaming, speaker display names, time calibration, favorites, or notes.
+
+Human-edited state is stored in:
 
 ```text
 data/audio-review/
@@ -260,62 +232,58 @@ data/audio-review/
 └─ activity-log.jsonl
 ```
 
-要保留全部人工调整，请备份整个 `data/audio-review/`；要完整迁移工作台，还应同时备份
-`data/` 中的音频、`transcript.json`、`reading_view.json`、分析结果和处理清单。
+Back up the complete `data/audio-review/` directory to preserve manual changes. For a full workspace migration, also back up the audio, `transcript.json`, `reading_view.json`, analysis results, and manifests under `data/`.
 
-不要手工编辑正在运行中的 JSON/JSONL 文件。需要恢复备份时，先关闭工作台。
+Do not manually edit JSON or JSONL files while the workspace is running. Stop the workspace before restoring a backup.
 
-## 13. 常见问题
+## 13. Troubleshooting
 
-### 页面空白或无法打开
+### Blank or unreachable page
 
-1. 按 `Ctrl+F5` 强制刷新；
-2. 如果仍无效，关闭启动窗口后重新运行日常启动命令；
-3. 确认没有同时启动多个工作台；
-4. 不要在同一个前端依赖目录混用 npm 和 pnpm。
+1. Press `Ctrl+F5`;
+2. If the page is still unavailable, close the launcher window and run the daily start command again;
+3. Confirm that only one workspace is running;
+4. Do not mix npm and pnpm in the same frontend dependency directory.
 
-### 启动窗口提示“node 不是内部或外部命令”
+### The launcher says that `node` is not recognized
 
-最新版启动器会自动把项目内置 Node 提供给前端，不需要安装系统级 Node。先在启动窗口按
-`Ctrl+C`，再重新双击 `启动录音文本工作台.bat`。若仍出现同一提示，请保留完整启动输出用于排查。
+The current launcher supplies the project-local Node runtime to the frontend. Press `Ctrl+C` in the launcher window and double-click `start-voicetrace-workspace.bat` again. Keep the full startup output if the problem persists.
 
-### 显示“本地录音服务暂时不可用”
+### The local recording service is unavailable
 
-本机接口没有运行或端口被占用。关闭旧进程后重新运行：
+The API is not running or its port is occupied. Stop the old process and run:
 
 ```powershell
 uv run voice-trace audio-review --data-dir data
 ```
 
-### 收藏汇总没有立即变化
+### Favorites do not update immediately
 
-等待最多 5 秒，切回收藏页，或点击“刷新收藏”。如果仍不同步，刷新两个标签页并确认本机
-接口正在运行。
+Wait up to five seconds, return to the favorites tab, or click `Refresh favorites`. If the pages still disagree, refresh both tabs and confirm that the local API is running.
 
-### 实际时间明显错误
+### Wall-clock time is wrong
 
-使用“校准开始时间”。录音内时间始终是文件相对时间，不应为了修正钟表时间而剪切音频。
+Use `Calibrate start time`. Recording-relative time is always based on the file and should not be corrected by editing the audio.
 
-### 句子说话人明显错误
+### Speaker labels are wrong
 
-如果只是名称不合适，使用“管理说话人”；如果同一标签混入了多个真实人物，这是声纹分离
-问题，应保留不确定性，不能只靠改名修复。
+If only the name is wrong, use `Manage speakers`. If one label contains several real people, this is a speaker-separation issue; keep the uncertainty instead of trying to fix it with a display name.
 
-### 转写文本不准确
+### The transcript is inaccurate
 
-点击句子回听原声，并展开原始识别候选。正式使用数字、姓名、地址或专有名词前必须人工确认。
+Replay the original audio and expand the raw recognition candidates. Confirm numbers, names, addresses, and proper nouns manually before formal use.
 
-## 14. 当前限制与公开发布前置条件
+## 14. Current limitations and public-release prerequisites
 
-本机版当前没有正文编辑和正式文稿导出；说话人管理只改显示名；收藏备注不是协同编辑。
+The local version does not edit transcript prose or export a formal document. Speaker management changes display names only, and favorite notes are not collaborative editing.
 
-如果未来需要公开或团队部署，至少还要增加：
+Public or team deployment would at least require:
 
-1. 用户登录、访问控制和操作归属；
-2. 加密的远程音频对象存储及生命周期策略；
-3. 服务器端数据库、备份和并发编辑冲突处理；
-4. HTTPS、审计权限和隐私告知；
-5. 安装包、自动升级、故障恢复和真实多用户验收；
-6. 明确的云端转写数据合规与费用策略。
+1. User login, access control, and operation ownership;
+2. Encrypted remote audio storage with lifecycle policies;
+3. A server-side database, backups, and concurrent-edit conflict handling;
+4. HTTPS, audit permissions, and privacy notices;
+5. An installer, automatic updates, failure recovery, and real multi-user acceptance testing;
+6. A clear compliance and cost policy for cloud transcription data.
 
-在这些条件完成前，不应把当前本机接口暴露到局域网或公网。
+Until these conditions are met, do not expose the local API to the LAN or public internet.

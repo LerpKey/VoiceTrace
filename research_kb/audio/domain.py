@@ -127,7 +127,7 @@ class TranscriptDocument(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     schema_version: Literal["1.0"] = "1.0"
-    title: str = "三天办公室录音转文字"
+    title: str = "Three-day office recording transcript"
     generated_at: datetime
     sources: tuple[RecordingSource, ...]
     speakers: tuple[SpeakerProfile, ...]

@@ -83,11 +83,11 @@ def anonymous_speaker_label(index: int) -> str:
         if value == 0:
             break
         value -= 1
-    return f"说话人 {letters}"
+    return f"Speaker {letters}"
 
 
 class SpeakerEmbedder:
-    """ERes2NetV2 embeddings loaded only after Qwen ASR is released."""
+    """CPU ERes2NetV2 embeddings for the default cloud-ASR path."""
 
     def __init__(self, *, model_directory: Path) -> None:
         self.model_directory = model_directory.expanduser().resolve()
@@ -104,7 +104,7 @@ class SpeakerEmbedder:
             self._model = AutoModel(
                 model="ERes2NetV2",
                 model_path=str(self.model_directory),
-                device="cuda:0",
+                device="cpu",
                 disable_update=True,
             )
         except Exception as error:
@@ -319,7 +319,7 @@ def resolve_local_segments(
                     if int(item_label) == int(label)
                 ],
             )
-            for label in sorted(set(int(value) for value in labels))
+            for label in sorted({int(value) for value in labels})
         ]
         # Do not attach singleton clusters by a second, looser rule: they are
         # useful diagnostics but are not identity evidence.
