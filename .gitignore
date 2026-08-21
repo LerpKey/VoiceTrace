@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.vite/
+.turbo/
+
+# Rust / Tauri
+target/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Models, recordings, exports and runtime data
+/models/
+data/models/*
+!data/models/audio/
+data/models/audio/*
+!data/models/audio/.gitkeep
+!data/models/audio/README.md
+recordings/
+transcripts/
+data/audio-review/*
+*.gguf
+*.bin
+*.onnx
+*.wav
+*.mp3
+*.m4a
+*.flac
+.benchmarks/
+/benchmarks/
+
+# Local build artifacts and project-only files
+audio-review-ui/.next/
+audio-review-ui/.wrangler/
+audio-review-ui/tsconfig.tsbuildinfo
+/AGENTS.md
+/docs/open-source-readiness.md
+/audio-review-ui/README.md
+/audio-review-ui/app/chatgpt-auth.ts
+
+# IDE / OS
+.idea/
+.vscode/
+*.user
+*.suo
+Thumbs.db
+.DS_Store

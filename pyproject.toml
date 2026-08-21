@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "voice-to-text-assistant"
+version = "0.1.0"
+description = "Standalone long-recording transcription assistant with local and optional cloud ASR."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.141,<1",
+    "imageio-ffmpeg>=0.6.0",
+    "numpy>=2.3.5",
+    "openai==2.46.0",
+    "pydantic>=2.11,<3",
+    "pydantic-settings>=2.9,<3",
+    "python-multipart>=0.0.22,<1",
+    "requests>=2.34.2",
+    "soundfile>=0.14.0",
+    "typer>=0.16,<1",
+    "uvicorn>=0.52,<1",
+]
+
+[project.optional-dependencies]
+local = [
+    "funasr>=1.4.1",
+    "qwen-asr>=0.0.6",
+    "torch>=2.1",
+    "torchaudio>=2.1",
+]
+dev = [
+    "pytest>=8.4,<10",
+    "pytest-cov>=6.2,<8",
+    "ruff>=0.12,<1",
+]
+
+[project.scripts]
+voice-to-text = "research_kb.audio_cli:app"
+file-assistant = "research_kb.audio_cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["research_kb"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.venv",
+    "/data/models",
+    "/.benchmarks",
+    "/**/__pycache__",
+    "/audio-review-ui/node_modules",
+    "/audio-review-ui/.next",
+    "/audio-review-ui/.vinext",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-config", "--strict-markers"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = [".benchmarks"]
